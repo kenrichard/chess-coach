@@ -18,7 +18,7 @@ const html = readFileSync(path.join(here, '..', 'index.html'), 'utf8');
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
 const ctx = { module: undefined };
 vm.createContext(ctx);
-for (const s of scripts) if (/function makeEngine|const CONTENT/.test(s)) vm.runInContext(s + '\n;globalThis.makeEngine = typeof makeEngine !== "undefined" ? makeEngine : globalThis.makeEngine; globalThis.CONTENT = typeof CONTENT !== "undefined" ? CONTENT : globalThis.CONTENT;', ctx);
+for (const s of scripts) if (/function makeEngine|const CONTENT/.test(s)) vm.runInContext(s + '\n;globalThis.makeEngine = typeof makeEngine !== "undefined" ? makeEngine : globalThis.makeEngine; globalThis.CONTENT = typeof CONTENT !== "undefined" ? CONTENT : globalThis.CONTENT; if (typeof makeTeacher !== "undefined") globalThis.makeTeacher = makeTeacher;', ctx);
 const E = ctx.makeEngine(Chess);
 const { CONTENT } = ctx;
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -58,4 +58,30 @@ for (const P of CONTENT.PUZZLES) {
   }
 }
 for (const O of CONTENT.OPENINGS) { const g = new Chess(); for (const [m] of O.moves) if (!san(g, m)) { fail(O.id, 'illegal', m); break; } console.log(O.id, 'ok', g.fen()); }
+// Mating drills: the teacher must mate from each drill start and from random positions,
+// against the computer's best defence, within the drill's move limit.
+const T = ctx.makeTeacher(Chess);
+const SQS = []; for (const f of 'abcdefgh') for (let r = 1; r <= 8; r++) SQS.push(f + r);
+for (const L of CONTENT.LESSONS) for (const st of L.steps) {
+  if (st.kind !== 'drill') continue;
+  const big = /Q/.test(st.fen) ? 'q' : 'r';
+  const starts = [st.fen];
+  while (starts.length < 60) {
+    const g = new Chess(); g.clear();
+    const [a, b, c] = [0, 1, 2].map(() => SQS[Math.floor(Math.random() * 64)]);
+    if (new Set([a, b, c]).size < 3) continue;
+    g.put({ type: 'k', color: 'w' }, a); g.put({ type: big, color: 'w' }, b); g.put({ type: 'k', color: 'b' }, c);
+    try { const t = new Chess(g.fen()); if (t.isGameOver() || new Chess(g.fen().replace(' w ', ' b ')).inCheck()) continue; } catch { continue; }
+    starts.push(g.fen());
+  }
+  for (const fen of starts) {
+    const g = new Chess(fen), seen = new Set([T.key(fen)]); let pk = '', n = 0;
+    while (!g.isGameOver() && n < st.limit) {
+      const tm = T.teach(g.fen(), seen, pk); pk = tm.kind; g.move(tm.move); n++; seen.add(T.key(g.fen()));
+      if (!g.isGameOver()) { g.move(E.pickMove(g.fen(), 4)); seen.add(T.key(g.fen())); }
+    }
+    if (!g.isCheckmate()) fail(L.id, 'teacher did not mate from', fen);
+  }
+  console.log(L.id, 'teacher mated from', starts.length, 'starts');
+}
 console.log(bad ? bad + ' failures' : 'all good');

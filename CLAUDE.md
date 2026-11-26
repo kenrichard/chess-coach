@@ -29,6 +29,14 @@ Levels (`LEVELS`): 1 random moves, but grabs a free piece or mate half the time;
 with lots of noise; 3 two deep with a little noise; 4 three deep with no noise. Level 4 plays
 the defending king in the mating drills.
 
+The mating drills (K+Q and K+R against a lone king) have a **teacher** (`makeTeacher`): Hint,
+and "Show me how", which plays the whole mate step by step with a sentence per move, and shades
+the enemy king's "box" (squares it can still reach; a rook's line counts as a wall even past
+your own king). Hand-written rules for these endings looped or drifted from awkward starts, so
+the teacher builds an exact table (`buildTable`, ~0.2 s, built on first use) and picks, among
+the fastest moves to mate, the one that best fits the method (shrink the box, else bring the
+king). The test plays it from each drill start and 60 random positions.
+
 The coach (`checkMove`) flags a move if the opponent can then mate in one, or win about 2 points
 of material or more with a sequence of captures (material only). Losing a single pawn isn't
 flagged on purpose, so beginners aren't nagged.

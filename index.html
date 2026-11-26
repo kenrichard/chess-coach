@@ -59,6 +59,8 @@ nav button[aria-current="page"] { background: var(--accent); color: var(--accent
 #main.with-board { display: grid; grid-template-columns: minmax(0, 600px) minmax(300px, 1fr); gap: 24px; align-items: start; }
 #main.with-board .board-wrap { display: block; position: sticky; top: 76px; }
 @media (max-width: 860px) {
+  header { position: static; }
+  #main.with-board .board-wrap { top: 0; }
   #main.with-board { grid-template-columns: 1fr; gap: 14px; }
   #main.with-board .board-wrap { position: static; max-width: min(600px, calc(100vh - 150px)); width: 100%; margin: 0 auto; }
 }
@@ -72,6 +74,7 @@ nav button[aria-current="page"] { background: var(--accent); color: var(--accent
 .sq.last::before, .sq.sel::before, .sq[class*="mark-"]::before { content: ""; position: absolute; inset: 0; }
 .sq.last::before { background: var(--sq-last); }
 .sq.sel::before { background: var(--sq-sel); }
+.sq.mark-box::before { background: rgba(40, 130, 255, .42); }
 .sq.mark-hint::before { box-shadow: inset 0 0 0 4px var(--hint); background: rgba(47, 111, 179, .18); }
 .sq.mark-danger::before { box-shadow: inset 0 0 0 4px var(--bad); background: rgba(179, 54, 43, .22); }
 .sq.check { background-image: radial-gradient(circle, rgba(230, 40, 30, .9) 0%, rgba(230, 40, 30, .5) 40%, transparent 72%); }
@@ -152,6 +155,11 @@ legend { font-weight: 700; margin-bottom: 6px; }
 .seg span { display: block; padding: 6px 14px; }
 .seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
 .seg input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: -3px; }
+.check.inline { padding: 0; font-size: 14px; color: var(--muted); }
+.walk-ctl { margin-top: 0; } .walk-ctl button { flex: 1; } .walk-count { margin: 10px 0 0; }
+.walk-text { border-left: 4px solid var(--line); padding: 4px 0 4px 14px; margin: 8px 0; min-height: 4.5em; }
+.walk-text.mine { border-color: var(--accent); }
+.walk-text p { margin: 0; }
 .lvl, .check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
 .lvl input, .check input { margin-top: 5px; accent-color: var(--accent); }
 .lvl small, .check small { display: block; color: var(--muted); font-size: 13px; }
@@ -474,7 +482,210 @@ function makeEngine(Chess) {
   return { VAL, NAME, MATE, LEVELS, evaluate: (fen) => evaluate(game(fen)), rootScores, bestMove,
     pickMove, checkMove, hint, mateMoves, mateInOne, bestCaptureLine, sanOf };
 }
-if (typeof module !== 'undefined') module.exports = { makeEngine };
+/* Exact solution for king + rook (type 'r') or king + queen (type 'q') against a lone king, the
+   attacker being White. W/B[idx] = plies to mate with that side to move, -1 = not a win
+   (draw or illegal). idx = wk*4096 + piece*64 + bk, squares 0..63 = rank*8 + file (a1 = 0). */
+function buildTable(type) {
+  const N = 262144, W = new Int8Array(N).fill(-1), B = new Int8Array(N).fill(-1);
+  const KM = [], RAY = type === 'q' ? [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] : [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (let s = 0; s < 64; s++) { const f = s & 7, r = s >> 3, l = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) { if (!df && !dr) continue; const F = f + df, R = r + dr; if (F >= 0 && F < 8 && R >= 0 && R < 8) l.push(R * 8 + F); } KM.push(l); }
+  const adj = (a, b) => Math.max(Math.abs((a & 7) - (b & 7)), Math.abs((a >> 3) - (b >> 3))) <= 1;
+  // Does the piece on `ro` attack `s`? Only the white king blocks (the black king is x-rayed).
+  function rookHits(ro, s, wk) {
+    if (ro === s) return false;
+    const rf = ro & 7, rr = ro >> 3, sf = s & 7, sr = s >> 3;
+    const straight = rf === sf || rr === sr, diag = Math.abs(rf - sf) === Math.abs(rr - sr);
+    if (!straight && !(type === 'q' && diag)) return false;
+    const df = Math.sign(sf - rf), dr = Math.sign(sr - rr);
+    for (let f = rf + df, r = rr + dr; f !== sf || r !== sr; f += df, r += dr) if (r * 8 + f === wk) return false;
+    return true;
+  }
+  const legal = new Uint8Array(N); // positions with distinct squares and kings apart
+  for (let wk = 0; wk < 64; wk++) for (let ro = 0; ro < 64; ro++) for (let bk = 0; bk < 64; bk++) {
+    if (wk === ro || wk === bk || ro === bk || adj(wk, bk)) continue;
+    legal[wk * 4096 + ro * 64 + bk] = 1;
+  }
+  // Black's moves: list of resulting W indices, or 'escape' (captured the rook).
+  function blackMoves(wk, ro, bk) {
+    const out = []; let escape = false;
+    for (const n of KM[bk]) {
+      if (adj(n, wk)) continue;
+      if (n === ro) { if (!adj(ro, wk)) escape = true; continue; }
+      if (rookHits(ro, n, wk)) continue;
+      out.push(wk * 4096 + ro * 64 + n);
+    }
+    return { out, escape };
+  }
+  function whiteMoves(wk, ro, bk) {
+    const out = [];
+    for (const n of KM[wk]) if (n !== ro && !adj(n, bk)) out.push(n * 4096 + ro * 64 + bk);
+    const rf = ro & 7, rr = ro >> 3;
+    for (const [df, dr] of RAY) for (let f = rf + df, r = rr + dr; f >= 0 && f < 8 && r >= 0 && r < 8; f += df, r += dr) {
+      const s = r * 8 + f; if (s === wk || s === bk) break; out.push(wk * 4096 + s * 64 + bk);
+    }
+    return out;
+  }
+  const bInfo = new Array(N);
+  for (let i = 0; i < N; i++) {
+    if (!legal[i]) continue;
+    const wk = i >> 12, ro = (i >> 6) & 63, bk = i & 63;
+    const mv = blackMoves(wk, ro, bk);
+    bInfo[i] = mv;
+    if (!mv.out.length && !mv.escape && rookHits(ro, bk, wk)) B[i] = 0;
+  }
+  const wList = []; for (let i = 0; i < N; i++) if (legal[i] && !rookHits(i >> 6 & 63, i & 63, i >> 12)) wList.push(i);
+  const wMoves = new Map();
+  for (let d = 0; d < 64; d += 2) {
+    let changed = false;
+    for (const i of wList) {
+      if (W[i] >= 0) continue;
+      let ms = wMoves.get(i); if (!ms) { ms = whiteMoves(i >> 12, (i >> 6) & 63, i & 63); wMoves.set(i, ms); }
+      for (const j of ms) if (B[j] === d) { W[i] = d + 1; changed = true; break; }
+    }
+    for (let i = 0; i < N; i++) {
+      const info = bInfo[i]; if (!info || B[i] >= 0 || info.escape || !info.out.length) continue;
+      let mx = 0, ok = true;
+      for (const j of info.out) { if (W[j] < 0) { ok = false; break; } if (W[j] > mx) mx = W[j]; }
+      if (ok && mx === d + 1) { B[i] = d + 2; changed = true; }
+    }
+    if (!changed) break;
+  }
+  return { W, B };
+}
+/* Teacher for the mating drills (king + queen or king + rook against a lone king): picks a move
+   that follows the method taught in the lesson and explains it in a sentence. Hand-written rules
+   for these endings drift or loop from awkward starts, so the teacher uses the exact table and,
+   among the fastest moves to mate, picks the one that best fits the method: shrink the box,
+   otherwise bring the king. Each table takes well under a second to build. */
+function makeTeacher(Chess) {
+  const cheb = (a, b) => Math.max(Math.abs(a.charCodeAt(0) - b.charCodeAt(0)), Math.abs(a[1] - b[1]));
+  const NB = (sq) => { const out = []; for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) { if (!df && !dr) continue; const f = sq.charCodeAt(0) + df, r = +sq[1] + dr; if (f >= 97 && f <= 104 && r >= 1 && r <= 8) out.push(String.fromCharCode(f) + r); } return out; };
+  function find(g, color, type) { for (const row of g.board()) for (const p of row) if (p && p.color === color && p.type === type) return p.square; return null; }
+  const other = (c) => (c === 'w' ? 'b' : 'w');
+  // The "box": squares the defending king can reach without stepping onto an attacked square.
+  // A rook's line counts as a wall even past your own king (that's how the lesson explains it).
+  function box(fen, def) {
+    const g = new Chess(fen), att = other(def);
+    const k = find(g, def, 'k'); g.remove(k);
+    const wall = new Chess(fen); wall.remove(k);
+    const ak = find(wall, att, 'k'); const hasRook = !!find(wall, att, 'r');
+    if (hasRook) wall.remove(ak);
+    const hit = (n) => g.isAttacked(n, att) || (hasRook && wall.isAttacked(n, att));
+    const seen = new Set([k]), q = [k];
+    while (q.length) {
+      const s = q.shift();
+      for (const n of NB(s)) {
+        if (seen.has(n)) continue;
+        const p = g.get(n); if (p && p.color === att) continue;
+        if (hit(n)) continue;
+        seen.add(n); q.push(n);
+      }
+    }
+    return [...seen];
+  }
+  // Rook: the rectangle the rook's lines wall the king into, after the defender's worst reply.
+  function rect(g, def, att) {
+    const r = find(g, att, 'r'), k = find(g, def, 'k');
+    if (!r) return 64;
+    const rf = r.charCodeAt(0) - 97, rr = +r[1] - 1, kf = k.charCodeAt(0) - 97, kr = +k[1] - 1;
+    return (kf < rf ? rf : kf > rf ? 7 - rf : 8) * (kr < rr ? rr : kr > rr ? 7 - rr : 8);
+  }
+  function rookArea(fen) {
+    const g = new Chess(fen), def = g.turn(), att = other(def);
+    let worst = 0;
+    for (const m of g.moves({ verbose: true })) { g.move(m); worst = Math.max(worst, rect(g, def, att)); g.undo(); }
+    return worst;
+  }
+  const flipTurn = (fen) => fen.replace(/ ([wb]) /, (m, c) => ' ' + other(c) + ' ');
+  const key = (fen) => fen.split(' ').slice(0, 2).join(' ');
+  const TABLES = {};
+  const sqi = (s) => (s.charCodeAt(0) - 97) + (+s[1] - 1) * 8;
+  const bigOf = (fen) => { const g = new Chess(fen); return find(g, g.turn(), 'q') ? 'q' : 'r'; };
+  const ready = (fen) => !!TABLES[bigOf(fen)];
+  const prepare = (fen) => { const t = bigOf(fen); if (!TABLES[t]) TABLES[t] = buildTable(t); };
+
+  function pick(fen, seen) {
+    const g = new Chess(fen), me = g.turn(), them = other(me);
+    const big = find(g, me, 'q') ? 'q' : 'r';
+    const cands = [];
+    for (const m of g.moves({ verbose: true })) {
+      const t = new Chess(fen); t.move(m);
+      if (t.isCheckmate()) return { move: m, mate: true };
+      if (t.isStalemate() || t.isDraw()) continue;
+      const bs = find(t, me, big);
+      if (!bs || (t.isAttacked(bs, them) && !t.isAttacked(bs, me))) continue; // never hang the piece
+      cands.push({ move: m, fen: t.fen(), rep: seen.has(key(t.fen())) ? 1 : 0 });
+    }
+    if (!cands.length) return null;
+    // The table is built for White attacking; mirror the board top to bottom when Black attacks.
+    prepare(fen);
+    const TB = TABLES[big];
+    const mir = (s) => me === 'w' ? sqi(s) : sqi(s[0] + (9 - s[1]));
+    const wk = find(g, me, 'k'), r = find(g, me, big), bk = find(g, them, 'k');
+    const now = TB.W[mir(wk) * 4096 + mir(r) * 64 + mir(bk)];
+    const before = big === 'r' ? rookArea(flipTurn(fen)) : box(fen, them).length;
+    for (const c of cands) {
+      const t = new Chess(c.fen);
+      c.dtm = TB.B[mir(find(t, me, 'k')) * 4096 + mir(find(t, me, big)) * 64 + mir(find(t, them, 'k'))];
+      c.area = big === 'r' ? rookArea(c.fen) : box(c.fen, them).length;
+    }
+    let pool = cands.filter((c) => c.dtm === now - 1);
+    if (!pool.length) pool = cands;
+    if (big === 'q') {
+      for (const c of pool) c.kd = cheb(find(new Chess(c.fen), me, 'k'), bk);
+      return pool.sort((a, b) => a.area - b.area || a.kd - b.kd)[0];
+    }
+    const step = (a, b) => Math.sign(b - a);
+    const cs = String.fromCharCode(r.charCodeAt(0) + step(r.charCodeAt(0), bk.charCodeAt(0))) + (+r[1] + step(+r[1], +bk[1]));
+    const man = (a, b) => Math.abs(a.charCodeAt(0) - b.charCodeAt(0)) + Math.abs(a[1] - b[1]);
+    const score = (c) => (c.area < before ? 0 : 1000) + c.area * 10 + (c.move.piece === 'k' ? man(c.move.to, cs) : 50);
+    return pool.sort((a, b) => score(a) - score(b))[0];
+  }
+
+  /* teach(fen, seen, prevKind) → { move, san, from, to, kind, text, boxAfter } for the side to move. */
+  function teach(fen, seen = new Set(), prevKind = '') {
+    const g = new Chess(fen), me = g.turn(), them = other(me);
+    const c = pick(fen, seen);
+    if (!c) return null;
+    const m = c.move, san = m.san;
+    const t = new Chess(fen); t.move(m);
+    const big = find(g, me, 'q') ? 'queen' : 'rook';
+    const a0 = box(flipTurn(fen), them).length;
+    const after = c.mate ? [] : box(t.fen(), them);
+    const a1 = after.length;
+    let text, kind;
+    if (c.mate) {
+      kind = 'mate';
+      text = `**${san} is checkmate!** The king is in check, and every square it could run to is covered.`;
+    } else if (big === 'rook' && m.piece === 'r' && t.inCheck()) {
+      kind = 'check';
+      const bkq = find(t, them, 'k'), ord = { 1: '1st', 2: '2nd', 3: '3rd' };
+      const line = bkq[1] === m.to[1] ? `the ${ord[bkq[1]] || bkq[1] + 'th'} rank` : `the ${m.to[0]}-file`;
+      text = `**${san}.** A rook check: Black's king has to leave ${line}, and from now on the rook's line is a wall it can't cross.`;
+    } else if (m.piece !== 'k' && a1 < a0) {
+      kind = 'shrink';
+      const bk = find(t, them, 'k'), at = m.to;
+      const knight = Math.abs(bk.charCodeAt(0) - at.charCodeAt(0)) * Math.abs(bk[1] - at[1]) === 2;
+      if (big === 'queen') text = `**${san}.** The queen shrinks Black's box from ${a0} squares to ${a1}.` + (knight ? ' It sits a knight\'s jump from the king: close enough to squeeze, too far to be attacked.' : ' It stays out of the king\'s reach.');
+      else text = `**${san}.** The rook moves its wall closer. Black's box shrinks from ${a0} squares to ${a1}.`;
+    } else if (m.piece === 'k') {
+      kind = 'approach';
+      const bkNow = find(g, them, 'k');
+      if (cheb(m.to, bkNow) >= cheb(m.from, bkNow)) text = `**${san}.** Your king lines up its next step. It wants to stand facing Black's king, one square apart, so the ${big} can push the king back.`;
+      else if (prevKind === 'approach') text = `**${san}.** Keep walking your king toward Black's king.` + (a1 <= 3 ? ' Careful: the box is tiny now, so before any quiet move, check that Black still has a move. No move and no check means stalemate.' : '');
+      else text = `**${san}.** The box can't safely get smaller right now, so bring your king closer. ` + (big === 'queen' ? 'A queen can\'t checkmate on her own; she needs the king\'s help.' : 'The rook needs your king to guard the squares in front of the enemy king.');
+    } else if (g.isAttacked(m.from, them) && !g.isAttacked(m.from, me)) {
+      kind = 'escape';
+      text = `**${san}.** Black's king was attacking the ${big}, so it moves away along the same line, keeping the wall in place.`;
+    } else {
+      kind = 'wait';
+      text = `**${san}.** A waiting move. The ${big} keeps the box the same size, and now Black has to move and give ground.`;
+    }
+    return { move: { from: m.from, to: m.to, promotion: m.promotion }, san, from: m.from, to: m.to, kind, text, boxAfter: after };
+  }
+  return { box, teach, key, ready, prepare };
+}
+if (typeof module !== 'undefined') module.exports = { makeEngine, makeTeacher, buildTable };
 </script>
 <script>
 /* Content: lessons, puzzles and openings. Every position and move here is checked by
@@ -778,6 +989,7 @@ if (typeof module !== 'undefined') module.exports = { CONTENT };
 /* Browser client: board, and the Learn / Puzzles / Openings / Play screens. */
 function startApp(Chess) {
   const E = makeEngine(Chess);
+  const T = makeTeacher(Chess);
   const { LESSONS, PUZZLES, OPENINGS } = CONTENT;
   const START = new Chess().fen();
   const fenOf = (f) => (f === 'start' ? START : f);
@@ -932,7 +1144,7 @@ function startApp(Chess) {
 
   // ---------------------------------------------------------------- Learn
   const Learn = {
-    lesson: null, step: 0, solved: false, msg: '', drill: null,
+    lesson: null, step: 0, solved: false, msg: '', drill: null, walk: null, showBox: store.get('cc.box', true),
     enter() { if (this.lesson) this.showStep(); else this.list(); },
     list() {
       bump(); layout(false);
@@ -950,15 +1162,25 @@ function startApp(Chess) {
       const st = this.cur;
       this.solved = st.kind === 'read';
       this.msg = '';
-      this.drill = null;
+      this.drill = null; this.walk = null;
       const fen = fenOf(st.fen);
       const turn = new Chess(fen).turn();
       board.onMove = (mv) => this.onMove(mv);
-      if (st.kind === 'drill') this.drill = { g: new Chess(fen), moves: 0, over: false };
-      board.set({ fen, last: null, marks: {}, orientation: st.kind === 'read' ? 'w' : turn, interactive: st.kind === 'read' ? null : turn, busy: false });
+      if (st.kind === 'drill') this.drill = { g: new Chess(fen), moves: 0, over: false, prevKind: '', seen: new Set([T.key(fen)]) };
+      board.set({ fen, last: null, marks: this.drill ? this.boxMarks(fen) : {}, orientation: st.kind === 'read' ? 'w' : turn, interactive: st.kind === 'read' ? null : turn, busy: false });
       this.render();
     },
+    // Shade the squares the defending king can still reach (the "box").
+    boxMarks(fen, force) {
+      if (!this.showBox && !force) return {};
+      const def = new Chess(fenOf(this.cur.fen)).turn() === 'w' ? 'b' : 'w';
+      const g = new Chess(fen);
+      if (g.isCheckmate()) return {};
+      const m = {}; for (const sq of T.box(fen, def)) m[sq] = 'box';
+      return m;
+    },
     render() {
+      if (this.walk) return this.renderWalk();
       const L = this.lesson, st = this.cur;
       const last = this.step === L.steps.length - 1;
       const turn = new Chess(fenOf(st.fen)).turn();
@@ -970,9 +1192,11 @@ function startApp(Chess) {
       if (this.drill) drill = `<p class="counter">Moves used: <b>${this.drill.moves}</b> of ${st.limit}</p>`;
       const showBtn = (st.kind === 'move' || st.kind === 'mate') && !this.solved ? '<button data-act="show" class="ghost-btn">Show me</button>' : '';
       const retry = (st.kind === 'drill' && (this.drill.moves || this.drill.over)) ? '<button data-act="retry" class="ghost-btn">Start over</button>' : '';
+      const drillTools = st.kind === 'drill' ? `<div class="row">${this.drill.over ? '' : '<button data-act="dhint" class="ghost-btn">Hint</button>'}<button data-act="walk" class="${this.drill.over && !this.solved ? 'primary' : 'ghost-btn'}">Show me how</button>
+          <label class="check inline"><input type="checkbox" data-act="box" ${this.showBox ? 'checked' : ''}><span>Shade the king's box</span></label></div>` : '';
       panel.innerHTML = `<div class="crumbs"><button data-act="list" class="link">← All lessons</button><span>${esc(L.group)} · step ${this.step + 1} of ${L.steps.length}</span></div>
         <h2>${esc(L.title)}</h2>${icons}<div class="prose">${md(st.text)}</div>${task}${drill}
-        ${this.msg}
+        ${this.msg}${drillTools}
         <div class="row">${this.step > 0 ? '<button data-act="prev" class="ghost-btn">Back</button>' : ''}${showBtn}${retry}
           <span class="grow"></span>
           ${this.solved ? `<button data-act="next" class="primary">${last ? 'Finish lesson' : 'Next'}</button>` : `<button data-act="next" class="ghost-btn">Skip</button>`}</div>`;
@@ -983,6 +1207,9 @@ function startApp(Chess) {
         if (act === 'prev') { this.step--; this.showStep(); }
         if (act === 'retry') this.showStep();
         if (act === 'show') this.showMe();
+        if (act === 'dhint') this.drillHint();
+        if (act === 'walk') this.startWalk();
+        if (act === 'box') { this.showBox = a.checked; store.set('cc.box', this.showBox); board.set({ marks: this.boxMarks(this.drill.g.fen()) }); }
         if (act === 'next') {
           if (last) { if (this.solved) { progress.lessons[L.id] = true; saveProgress(); } this.list(); }
           else { this.step++; this.showStep(); }
@@ -1039,6 +1266,83 @@ function startApp(Chess) {
         return this.bounce(fen, t, why + ' Try again.');
       }
     },
+    // Teacher work for king + rook needs a one-off table (about a second); show a note first.
+    withTeacher(fen, fn) {
+      if (T.ready(fen)) return fn();
+      this.msg = feedback('info', 'Working out the best way to do this…');
+      this.render();
+      later(() => { T.prepare(fen); this.msg = ''; fn(); }, 40);
+    },
+    drillHint() {
+      const d = this.drill; if (d.over || d.g.turn() !== new Chess(fenOf(this.cur.fen)).turn()) return;
+      const fen = d.g.fen();
+      this.withTeacher(fen, () => {
+        const tm = T.teach(fen, d.seen, d.prevKind);
+        if (!tm) return;
+        board.set({ marks: Object.assign(this.boxMarks(fen, true), { [tm.from]: 'hint', [tm.to]: 'hint' }) });
+        this.msg = feedback('hint', 'Try this: ' + md(tm.text).replace(/^<p>|<\/p>$/g, ''));
+        this.render();
+      });
+    },
+    startWalk() {
+      const d = this.drill;
+      const from = d.over || !d.moves ? fenOf(this.cur.fen) : d.g.fen();
+      bump();
+      this.withTeacher(from, () => {
+        const me = new Chess(from).turn(), def = me === 'w' ? 'b' : 'w';
+        const g = new Chess(from), seen = new Set([T.key(from)]);
+        const boxOf = (f) => { const m = {}; if (!new Chess(f).isCheckmate()) for (const sq of T.box(f, def)) m[sq] = 'box'; return m; };
+        const frames = [{ fen: from, last: null, marks: boxOf(from), text: `Watch the shaded squares: that's the **box**, every square Black's king can still reach. Each of White's moves either shrinks the box or brings the king closer. Press **Next** to step through it, or **Play** to watch.` }];
+        let pk = '';
+        for (let n = 0; n < 120 && !g.isGameOver(); n++) {
+          if (g.turn() === me) {
+            const tm = T.teach(g.fen(), seen, pk); if (!tm) break;
+            pk = tm.kind;
+            const r = g.move(tm.move);
+            frames.push({ fen: g.fen(), last: r, marks: boxOf(g.fen()), text: tm.text, mine: true });
+          } else {
+            const r = g.move(E.pickMove(g.fen(), 4));
+            const left = T.box(g.fen(), def).length;
+            frames.push({ fen: g.fen(), last: r, marks: boxOf(g.fen()), text: `Black plays **${r.san}**. The king has ${left} square${left === 1 ? '' : 's'} left in its box.` });
+          }
+          seen.add(T.key(g.fen()));
+        }
+        this.walk = { frames, i: 0, playing: false, mine: frames.filter((f) => f.mine).length };
+        this.showFrame();
+      });
+    },
+    showFrame() {
+      const w = this.walk, f = w.frames[w.i];
+      board.set({ fen: f.fen, last: f.last, marks: f.marks, interactive: null, busy: false });
+      this.render();
+    },
+    renderWalk() {
+      const w = this.walk, f = w.frames[w.i], end = w.i === w.frames.length - 1;
+      const myMoves = w.frames.slice(0, w.i + 1).filter((x) => x.mine).length;
+      panel.innerHTML = `<div class="row walk-ctl"><button data-act="w-prev" class="ghost-btn" ${w.i ? '' : 'disabled'}>◀ Back</button>
+          <button data-act="w-play" class="ghost-btn">${w.playing ? 'Pause' : 'Play'}</button>
+          <button data-act="w-next" class="${end ? 'ghost-btn' : 'primary'}" ${end ? 'disabled' : ''}>Next ▶</button></div>
+        <p class="crumbs walk-count"><span>Show me how · White's move ${myMoves} of ${w.mine}</span></p>
+        <div class="walk-text ${f.mine ? 'mine' : ''}">${md(f.text)}</div>
+        <div class="row"><button data-act="exit" class="link">← Back to the drill</button><span class="grow"></span><button data-act="w-try" class="${end ? 'primary' : 'ghost-btn'}">Now you try</button></div>
+        ${end ? '<p class="muted small">That\'s the whole method. Press <b>Now you try</b> and do it yourself. Use <b>Hint</b> if you get stuck.</p>' : ''}`;
+      panel.onclick = (e) => {
+        const a = e.target.closest('[data-act]'); if (!a) return;
+        const act = a.dataset.act;
+        if (act === 'w-prev') { w.playing = false; w.i--; this.showFrame(); }
+        if (act === 'w-next') { w.playing = false; w.i++; this.showFrame(); }
+        if (act === 'w-play') { w.playing = !w.playing; if (w.playing && end) w.i = 0, this.showFrame(); this.render(); if (w.playing) this.tick(); }
+        if (act === 'w-try' || act === 'exit') { this.walk = null; this.showStep(); }
+      };
+    },
+    tick() {
+      later(() => {
+        const w = this.walk; if (!w || !w.playing) return;
+        if (w.i >= w.frames.length - 1) { w.playing = false; return this.render(); }
+        w.i++; this.showFrame();
+        if (w.i < w.frames.length - 1) this.tick(); else { w.playing = false; this.render(); }
+      }, this.walk.frames[this.walk.i].mine ? 2600 : 1400);
+    },
     drillMove(mv) {
       const d = this.drill, st = this.cur;
       if (d.over) return;
@@ -1050,7 +1354,8 @@ function startApp(Chess) {
       const me = new Chess(fenOf(st.fen)).turn();
       const finish = (ok, html) => { d.over = true; this.solved = ok; board.set({ fen: d.g.fen(), interactive: null }); this.msg = feedback(ok ? 'good' : 'bad', html); this.render(); };
       const lastMv = d.g.history({ verbose: true }).slice(-1)[0];
-      board.set({ fen: d.g.fen(), last: lastMv, busy: true });
+      board.set({ fen: d.g.fen(), last: lastMv, busy: true, marks: this.boxMarks(d.g.fen()) });
+      d.seen.add(T.key(d.g.fen()));
       if (d.g.isCheckmate()) return finish(true, md(st.done));
       if (d.g.isStalemate()) return finish(false, md('**Stalemate.** The king isn\'t in check but has no move, so the game is a draw. Leave it a square before you make a quiet move. Press *Start over*.'));
       if (d.g.isDraw()) return finish(false, 'That position is a draw. Press <i>Start over</i> to try again.');
@@ -1060,7 +1365,8 @@ function startApp(Chess) {
       later(() => {
         const r = E.pickMove(d.g.fen(), 4);
         const res = d.g.move(r);
-        board.set({ fen: d.g.fen(), last: res, busy: false, interactive: me });
+        d.seen.add(T.key(d.g.fen()));
+        board.set({ fen: d.g.fen(), last: res, busy: false, interactive: me, marks: this.boxMarks(d.g.fen()) });
         if (d.g.isDraw()) return finish(false, res.captured ? `The king took your ${NAME[res.captured]}, and a lone king can't be mated. Keep your pieces guarded or out of reach. Press <i>Start over</i>.` : 'That position is a draw. Press <i>Start over</i>.');
         this.render();
       }, 350);
