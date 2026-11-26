@@ -53,4 +53,11 @@ completed), `cc.play` (current game: start FEN, moves, color, level, coach), `cc
 - Game review after a Play game: walk back through your worst moves.
 - More puzzles (aim for 100+), maybe a daily set and spaced repetition of missed ones.
 - More openings and "what if they play something else" branches.
-- Not deployed yet. Hasenpfeffer deploys from GitHub to Vercel; this could do the same.
+
+## Deploy
+
+Live at https://learn-chess-coach.vercel.app (Vercel team "Ken Richard's projects", project
+`chess-coach`; GitHub repo `kenrichard/chess-coach`, public). Every push to `main` deploys to
+production. No build step. `chess-coach.vercel.app` belongs to someone else, which is why the
+address differs from the project name. Deployment protection is on for the team's generated
+URLs, so share only the `learn-chess-coach` address.
