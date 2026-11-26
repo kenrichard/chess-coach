@@ -43,9 +43,19 @@ flagged on purpose, so beginners aren't nagged.
 
 ## Content rules
 
-- Lesson step kinds: `read`, `move` (`accept` list, `wrong` map of SAN to explanation, optional
-  `other`), `mate` (any mate in one counts), `safe` (any move the coach is happy with),
-  `drill` (play on against level 4 until `goal` within `limit` moves).
+- Lesson step kinds: `read` (optional `hl` to light up squares, `why: true` to explain the
+  checkmate on the board), `tap` (tap each of `squares`, for learning square names), `move`
+  (`accept` list, `wrong` map of SAN to explanation, optional `other`, `say: true` to describe a
+  wrong move in words), `mate` (any mate in one counts), `safe` (any move the coach is happy
+  with), `drill` (play on against level 4 until `goal` within `limit` moves).
+- Lessons start with a **Start here** group (squares, notation, check, checkmate) for a true
+  beginner. Ken asked for this: he didn't know what "b-file" meant.
+- `GLOSSARY` (in CONTENT): chess words. `md()` links the first use of each word in a block of
+  text (tap for the meaning) and every square name (tap to light it up). Add a word there when
+  new text uses a term a beginner wouldn't know.
+- Every checkmate (lesson, drill, puzzle) shows "Why is it checkmate?" (`whyMate`): the
+  checking piece, which piece covers each escape square (marked red), and why capture and
+  block fail. Puzzle solutions list each move in words (`describe`).
 - Puzzle `line` alternates your move and the reply. Mate themes accept any mating move at the
   end. If you play a different good move, the computer replies with its own best move.
 - Write for a beginner: plain words, say *why*, name squares.

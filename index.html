@@ -164,6 +164,22 @@ legend { font-weight: 700; margin-bottom: 6px; }
 .lvl input, .check input { margin-top: 5px; accent-color: var(--accent); }
 .lvl small, .check small { display: block; color: var(--muted); font-size: 13px; }
 footer { max-width: 1120px; margin: 10px auto 30px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+.sq.mark-line::before { background: rgba(240, 190, 40, .45); }
+.sq.mark-spot::before { background: rgba(240, 190, 40, .6); box-shadow: inset 0 0 0 4px #e0a800; }
+.term, .sqref { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline dotted var(--accent) 2px; text-underline-offset: 3px; }
+.sqref { text-decoration-style: solid; text-decoration-thickness: 1px; }
+.term:hover, .sqref:hover { color: var(--accent); }
+#termbox { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 0 12px max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: center; pointer-events: none; }
+#termbox[hidden] { display: none; }
+.term-card { pointer-events: auto; width: 100%; max-width: 560px; background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; padding: 14px 16px; box-shadow: 0 6px 30px rgba(0, 0, 0, .35); }
+.term-card p { margin: 0; } .term-card .row { margin-top: 10px; }
+details.why { border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 10px 0; }
+details.why summary { font-weight: 700; cursor: pointer; }
+details.why ul { padding-left: 18px; margin: 6px 0; } details.why p { margin: 6px 0; }
+ul.line { margin: 6px 0 0; padding-left: 18px; }
+.glossary dt { font-weight: 700; font-size: 17px; margin-top: 14px; text-transform: capitalize; }
+.glossary dd { margin: 2px 0 0; color: var(--ink); } .glossary dd p { margin: 0; }
+.tap-task { font-size: 20px; }
 #loading { padding: 40px 16px; text-align: center; color: var(--muted); }
 </style>
 </head>
@@ -181,6 +197,7 @@ footer { max-width: 1120px; margin: 10px auto 30px; padding: 0 16px; color: var(
   <div class="board-wrap"><div id="board" aria-label="Chess board"></div><div id="promo" hidden></div></div>
   <div id="panel"><p id="loading">Loading…</p></div>
 </div>
+<div id="termbox" role="dialog" aria-live="polite" hidden></div>
 <footer>Piece images: Colin M.L. Burnett ("cburnett"), CC BY-SA 3.0. Rules: chess.js.</footer>
 <script>
 const PIECES = {
@@ -697,8 +714,100 @@ const CONTENT = (() => {
      move   — make one of `accept` (SAN). `wrong` maps SAN → explanation for tempting mistakes.
      mate   — give checkmate in one (any mating move counts).
      safe   — make any move the coach finds safe (no piece left hanging, no mate allowed).
+     tap    — tap each of `squares` in turn (learning square names).
+     read steps may have `hl` ('file:e', 'rank:2', 'sq:e4', 'diag:a1-h8') to light up squares, or `why: true` to explain the checkmate on the board.
+     move steps with `say: true` describe a wrong move in words, to practise reading moves.
      drill  — play on against the computer until `goal` ('mate' or 'promote') within `limit` moves. */
   const LESSONS = [
+    {
+      id: 'board', title: 'The board: files, ranks and squares', group: 'Start here',
+      steps: [
+        { kind: 'read', fen: 'start', hl: 'file:e', text: `Chess players name every square, so a book, a coach or this app can say exactly where something is.
+
+The board has 8 columns called **files**. They are lettered **a to h**, from left to right as White sees it. The letters are printed along the bottom edge of the board.
+
+The highlighted column is the **e-file**. A file runs from White's side to Black's side.` },
+        { kind: 'read', fen: 'start', hl: 'rank:2', text: `The 8 rows are called **ranks**. They are numbered **1 to 8**, starting from White's side. The numbers are printed down the left edge.
+
+The highlighted row is the **2nd rank**, where White's pawns start. White's other pieces start on the 1st rank; Black's start on the 7th and 8th.
+
+Easy way to remember: a *rank* goes side to side, like soldiers standing in a row. A *file* goes front to back, like people walking in single file.` },
+        { kind: 'read', fen: 'start', hl: 'sq:e4', text: `A square's name is its **file letter, then its rank number**.
+
+The highlighted square is **e4**: go along to the e-file, then up to the 4th rank. It's where White's king pawn often goes on move one.
+
+Tip: in this app, you can tap any square name in the text, like d5 or h1, to see it light up on the board.` },
+        { kind: 'tap', fen: 'start', squares: ['d5', 'h1', 'c7', 'f3', 'a8'], text: `Your turn. Tap each square as it's asked for. Use the letters along the bottom and the numbers down the side.` },
+        { kind: 'read', fen: 'start', hl: 'diag:a1-h8', text: `A **diagonal** is a slanting line of squares, all the same color. Bishops move along diagonals, and queens can too.
+
+The highlighted one runs from a1 to h8.
+
+One more word you'll see a lot: the **back rank**, the row a player's pieces start on. It's the 1st rank for White and the 8th rank for Black.` },
+      ],
+    },
+    {
+      id: 'notation', title: 'Reading moves: Nf3, Bxc6, Ra1#', group: 'Start here',
+      steps: [
+        { kind: 'read', fen: 'start', text: `Moves are written in a short code. Once you can read it, books, puzzles and this app all make sense.
+
+**Which piece:** K king, Q queen, R rook, B bishop, N knight (because K is taken). A pawn has no letter.
+
+**Where it goes:** the square it lands on.
+
+So **Nf3** means "a knight moves to f3", and **e4** means "a pawn moves to e4".` },
+        { kind: 'move', fen: 'start', accept: ['Nf3'], say: true, text: 'Play **Nf3**: a knight to the square f3.', done: 'That\'s **Nf3**. The knight on g1 jumped to f3.' },
+        { kind: 'read', fen: 'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3', text: `A few extra symbols:
+
+- **x** means a capture: **Bxc6** is "bishop takes on c6".
+- A pawn capture names the file the pawn came from: **exd5** is "the e-pawn takes on d5".
+- **+** means check: the move attacks the king.
+- **#** means checkmate: the game is over.
+- **O-O** is castling on the king's side, **O-O-O** on the queen's side.
+
+So **Ra1#** reads "rook to a1, checkmate".` },
+        { kind: 'move', fen: 'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 3 3', accept: ['Bxc6'], say: true, text: 'Play **Bxc6**: the bishop takes the piece on c6.', done: 'That\'s **Bxc6**. The bishop on b5 took the knight on c6.' },
+        { kind: 'move', fen: 'k7/8/8/8/8/8/1R6/2R3K1 w - - 0 1', accept: ['Ra1#'], say: true, text: 'Play **Ra1#**: a rook moves to a1, and it\'s checkmate. (There are two rooks. Only one of them can get to a1.)', done: 'That\'s **Ra1#**. The rook on c1 slid to a1 and gave checkmate. The next lessons explain *why* that is checkmate.' },
+      ],
+    },
+    {
+      id: 'check', title: 'Check: three ways out', group: 'Start here',
+      steps: [
+        { kind: 'read', fen: '6k1/5ppp/8/8/8/8/4N1PP/r6K w - - 0 1', text: `A king is in **check** when an enemy piece attacks it. You can't ignore a check: your next move *must* get out of it. There are exactly three ways:
+
+1. **Move** the king to a square that isn't attacked.
+2. **Capture** the piece that is giving check.
+3. **Block**: put one of your pieces in between (this doesn't work against a knight or a piece right next to the king).
+
+If none of the three works, it's **checkmate** and the game is over. Let's practise each one.` },
+        { kind: 'move', fen: '4k3/8/8/8/8/8/8/r3K3 w - - 0 1', accept: ['Kd2', 'Ke2', 'Kf2'], say: true, text: `**Way 1: move.** Black's rook on a1 checks your king along the 1st rank. Nothing can take it or block it.
+
+Move your king off the 1st rank, to a square the rook doesn't reach.`, done: 'Out of check. The rook only controls the 1st rank and the a-file, so the 2nd rank is safe.' },
+        { kind: 'move', fen: '6k1/5ppp/8/8/8/8/4QPPP/4r1K1 w - - 0 1', accept: ['Qxe1'], say: true, text: `**Way 2: capture.** Black's rook on e1 checks your king along the back rank. Your king can't move: f1 is attacked and your own pawns fill f2, g2 and h2.
+
+But one of your pieces can take the rook. Do it.`, wrong: { 'Qf1': 'That blocks the check, which is legal. But capturing is better here: the rook is free to take, and it\'s worth 5 points.' }, done: 'You took the piece giving check, and won a rook for free.' },
+        { kind: 'move', fen: '6k1/5ppp/8/8/8/8/4N1PP/r6K w - - 0 1', accept: ['Ng1'], say: true, text: `**Way 3: block.** Black's rook on a1 checks your king on h1. The king can't move (g1 is attacked, your pawns fill g2 and h2) and nothing can take the rook.
+
+Put your knight in the way, on a square where your king protects it.`, wrong: { 'Nc1': 'That blocks the check, but the rook just takes the knight (Rxc1+) and you are in check again with nothing left to block. Block on a square your king guards.' }, done: '**Ng1** blocks the check, and your king guards g1, so the rook can\'t take the knight for free.' },
+      ],
+    },
+    {
+      id: 'mate', title: 'Checkmate and stalemate', group: 'Start here',
+      steps: [
+        { kind: 'read', fen: 'k7/8/8/8/8/8/1R6/R5K1 b - - 0 1', why: true, text: `**Checkmate** means the king is in check and none of the three ways out works. Here is the position after **Ra1#** from the last lesson. Let's check each way out:` },
+        { kind: 'read', fen: '7k/8/6K1/8/8/8/8/Q7 w - - 0 1', text: `**Stalemate** is the trap to know about: the player to move is *not* in check but has no legal move. The game is a **draw**, even if one side is far ahead. It is the classic way to throw away a won game.
+
+Here White has a queen and Black only has a king.` },
+        { kind: 'mate', fen: '7k/8/6K1/8/8/8/8/Q7 w - - 0 1', text: `Checkmate Black in one move.
+
+Your king on g6 already covers g7 and h7. Find the queen move that attacks h8 *and* covers g8.`,
+          stalemate: 'That is **stalemate**: Black is not in check, but the king has no square to go to. The game ends in a draw. Before you play a quiet move against a lone king, check that it still has a move.',
+          done: 'Checkmate. **Qa8** checks along the back rank while your king covers g7 and h7. **Qg7** works too, because your king guards the queen.' },
+        { kind: 'mate', fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', text: `This one comes up all the time. Black's king is stuck behind its own pawns.
+
+Checkmate in one.`,
+          done: 'This is the **back-rank mate**. Black castled and never gave the king a square to escape. Moving one of those pawns early (often h6) prevents it.' },
+      ],
+    },
     {
       id: 'think', title: 'Before every move: checks, captures, threats', group: 'Habits',
       steps: [
@@ -741,27 +850,6 @@ Which capture is worth more? Take it.`,
 Before you capture, check what guards each one. Look at the pawn on c7.`,
           wrong: { 'Rxd6': 'The pawn on c7 guards d6, so ...cxd6 takes your rook. You would give 5 points for 1. Always ask "what guards it?" before you capture.' },
           done: 'Right. The pawn on d6 is guarded by c7. The bishop on h4 has no guard, so it is free.' },
-      ],
-    },
-    {
-      id: 'mate', title: 'Check, checkmate and stalemate', group: 'Basics',
-      steps: [
-        { kind: 'read', fen: '7k/8/6K1/8/8/8/8/Q7 w - - 0 1', text: `**Check:** the king is attacked. The player must get out of it at once: move the king, capture the attacker, or put a piece in between.
-
-**Checkmate:** the king is in check and none of those work. The game is over.
-
-**Stalemate:** the player to move is *not* in check but has no legal move. The game is a **draw**, even if one side is far ahead. It is the classic way to throw away a won game.
-
-Here White has a queen and Black only has a king.` },
-        { kind: 'mate', fen: '7k/8/6K1/8/8/8/8/Q7 w - - 0 1', text: `Checkmate Black in one move.
-
-Your king on g6 already covers g7 and h7. Find the queen move that attacks h8 *and* covers g8.`,
-          stalemate: 'That is **stalemate**: Black is not in check, but the king has no square to go to. The game ends in a draw. Before you play a quiet move against a lone king, check that it still has a move.',
-          done: 'Checkmate. **Qa8** checks along the back rank while your king covers g7 and h7. **Qg7** works too, because your king guards the queen.' },
-        { kind: 'mate', fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', text: `This one comes up all the time. Black's king is stuck behind its own pawns.
-
-Checkmate in one.`,
-          done: 'This is the **back-rank mate**. Black castled and never gave the king a square to escape. Moving one of those pawns early (often h6) prevents it.' },
       ],
     },
     {
@@ -981,7 +1069,32 @@ Use spare rook moves (one square along the cut-off line) to make the kings face 
       ] },
   ];
 
-  return { LESSONS, PUZZLES: PUZZLES.filter((p) => !p.skip), OPENINGS };
+
+  /* Chess words. Each term is linked the first time it appears in lesson, puzzle or opening
+     text; tapping it shows the meaning (and lights up squares where that helps). `hl` uses the
+     same codes as a lesson step's `hl`. `match` lists other spellings that link to it. */
+  const GLOSSARY = [
+    { term: 'file', match: ['files'], text: 'A column of squares, running from White\'s side to Black\'s. Files are lettered a to h. The "b-file" is the column b1 to b8.', hl: 'file:b' },
+    { term: 'rank', match: ['ranks'], text: 'A row of squares, running side to side. Ranks are numbered 1 to 8 from White\'s side. The "7th rank" is the row a7 to h7.', hl: 'rank:7' },
+    { term: 'back rank', match: [], text: 'The row a player\'s pieces start on: the 1st rank for White, the 8th rank for Black. A king stuck there behind its own pawns can be mated by a rook or queen: the back-rank mate.', hl: 'rank:1,rank:8' },
+    { term: 'diagonal', match: ['diagonals'], text: 'A slanting line of squares, all one color. Bishops move along diagonals; so can queens.', hl: 'diag:a1-h8' },
+    { term: 'center', match: ['centre'], text: 'The four middle squares, d4, e4, d5 and e5, and the squares around them. Pieces in the center reach more squares.', hl: 'sq:d4,sq:e4,sq:d5,sq:e5' },
+    { term: 'check', match: ['checks', 'in check', 'gives check'], text: 'An attack on the king. The player in check must get out of it at once: move the king, capture the attacker, or block. Written + after a move.' },
+    { term: 'checkmate', match: ['mate', 'mates', 'mated'], text: 'Check with no way out: the king can\'t move to safety, the attacker can\'t be captured, and the check can\'t be blocked. The game is over. Written # after a move.' },
+    { term: 'stalemate', match: [], text: 'The player to move is not in check but has no legal move. The game is a draw, even if the other side is far ahead.' },
+    { term: 'castle', match: ['castling', 'castled', 'castles'], text: 'A special move of king and rook together: the king moves two squares toward a rook, and the rook jumps over to the other side of it. Written O-O (king\'s side) or O-O-O (queen\'s side). You can\'t castle out of check, or if the king or that rook has already moved.' },
+    { term: 'develop', match: ['developing', 'development', 'developed'], text: 'Bringing a knight or bishop off the back rank to a square where it does something. Getting your pieces out quickly is the main job of the opening.' },
+    { term: 'material', match: [], text: 'Your pieces counted in points: pawn 1, knight 3, bishop 3, rook 5, queen 9. "Winning material" means ending up with more points than your opponent.' },
+    { term: 'trade', match: ['trades', 'trading', 'exchange'], text: 'Swapping a piece for one of the same value, like a knight for a knight.' },
+    { term: 'fork', match: ['forks'], text: 'One piece attacking two enemy pieces at the same time. Your opponent can only save one.' },
+    { term: 'pin', match: ['pins', 'pinned'], text: 'An attack on a piece that can\'t move out of the way, because a more valuable piece stands behind it on the same line.' },
+    { term: 'skewer', match: ['skewers'], text: 'An attack on a valuable piece that has to move out of the way, letting you take the piece behind it.' },
+    { term: 'guard', match: ['guards', 'guarded', 'protects', 'protected', 'defended'], text: 'A piece is guarded when one of your other pieces could take back if it were captured.' },
+    { term: 'promote', match: ['promotion', 'promotes'], text: 'A pawn that reaches the far end of the board turns into a queen (or rook, bishop or knight, your choice).' },
+    { term: 'notation', match: ['SAN'], text: 'The short code for writing moves. K king, Q queen, R rook, B bishop, N knight, nothing for a pawn, then the square it lands on. x = captures, + = check, # = checkmate, O-O = castles. "Bxc6" is "bishop takes on c6".' },
+    { term: 'tempo', match: [], text: 'A single move, thought of as time. "Losing a tempo" means wasting a move, for example by moving the same piece twice in the opening.' },
+  ];
+  return { LESSONS, PUZZLES: PUZZLES.filter((p) => !p.skip), OPENINGS, GLOSSARY };
 })();
 if (typeof module !== 'undefined') module.exports = { CONTENT };
 </script>
@@ -990,7 +1103,7 @@ if (typeof module !== 'undefined') module.exports = { CONTENT };
 function startApp(Chess) {
   const E = makeEngine(Chess);
   const T = makeTeacher(Chess);
-  const { LESSONS, PUZZLES, OPENINGS } = CONTENT;
+  const { LESSONS, PUZZLES, OPENINGS, GLOSSARY } = CONTENT;
   const START = new Chess().fen();
   const fenOf = (f) => (f === 'start' ? START : f);
   const $ = (s, r = document) => r.querySelector(s);
@@ -1005,9 +1118,44 @@ function startApp(Chess) {
   const NAME = E.NAME;
   const pieceImg = (code) => `<img src="${PIECES[code]}" alt="" draggable="false">`;
 
-  // Tiny markdown: paragraphs, - and 1. lists, **bold**, *italic*.
-  function md(text) {
-    const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>');
+  // Chess words and square names in text become tappable. Words link the first time they
+  // appear in a block of text; square names (e4, h1) always do.
+  const TERM = {};
+  for (const g of GLOSSARY) for (const w of [g.term, ...g.match]) TERM[w.toLowerCase()] = g;
+  const termAlt = Object.keys(TERM).sort((a, b) => b.length - a.length).map((w) => w.replace(/ /g, '\\s+')).join('|');
+  const LINK_RE = new RegExp(`(?<![\\w-])(?:([a-h])-file|([1-8])(?:st|nd|rd|th) rank|([a-h][1-8])|(${termAlt}))(?![\\w-])`, 'gi');
+  function linkify(html, seen) {
+    return html.replace(LINK_RE, (m, file, rank, sq, word) => {
+      if (sq) return `<button class="sqref" data-sq="${sq.toLowerCase()}">${m}</button>`;
+      if (file) return `<button class="term" data-term="file" data-hl="file:${file.toLowerCase()}">${m}</button>`;
+      if (rank) return `<button class="term" data-term="rank" data-hl="rank:${rank}">${m}</button>`;
+      const g = TERM[word.toLowerCase().replace(/\s+/g, ' ')];
+      if (!g || seen.has(g.term)) return m;
+      seen.add(g.term);
+      return `<button class="term" data-term="${esc(g.term)}">${m}</button>`;
+    });
+  }
+  // Squares to light up, from codes like 'file:e', 'rank:2', 'sq:e4', 'diag:a1-h8' (comma separated).
+  function hlMarks(code, kind = 'spot') {
+    const m = {};
+    for (const part of String(code || '').split(',').filter(Boolean)) {
+      const [type, v] = part.split(':');
+      if (type === 'file') for (let r = 1; r <= 8; r++) m[v + r] = kind;
+      if (type === 'rank') for (const f of 'abcdefgh') m[f + v] = kind;
+      if (type === 'sq') m[v] = kind;
+      if (type === 'diag') {
+        const [a, b] = v.split('-'); let f = a.charCodeAt(0), r = +a[1];
+        const sf = Math.sign(b.charCodeAt(0) - f), sr = Math.sign(+b[1] - r);
+        for (;;) { m[String.fromCharCode(f) + r] = kind; if (String.fromCharCode(f) + r === b) break; f += sf; r += sr; }
+      }
+    }
+    return m;
+  }
+
+  // Tiny markdown: paragraphs, - and 1. lists, **bold**, *italic*, plus linked words.
+  function md(text, links = true) {
+    const seen = new Set();
+    const inline = (t) => { const h = esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>'); return links ? linkify(h, seen) : h; };
     return text.trim().split(/\n\s*\n/).map((block) => {
       const lines = block.split('\n');
       if (lines.every((l) => /^\s*- /.test(l))) return '<ul>' + lines.map((l) => '<li>' + inline(l.replace(/^\s*- /, '')) + '</li>').join('') + '</ul>';
@@ -1020,6 +1168,84 @@ function startApp(Chess) {
   }
   const stripSan = (s) => s.replace(/[+#?!]/g, '');
   function tryMove(fen, mv) { const g = new Chess(fen); try { const r = g.move(mv); return { g, r }; } catch (e) { return null; } }
+
+  // A move in words: "the knight on g1 moves to f3, check".
+  function describe(r) {
+    if (r.flags.includes('k') || r.flags.includes('q')) return `${SIDE[r.color]} castles on the ${r.flags.includes('k') ? 'king' : 'queen'}'s side`;
+    const who = `the ${NAME[r.piece]} on ${r.from}`;
+    let t = r.captured ? `${who} takes the ${NAME[r.captured]} on ${r.to}` : `${who} moves to ${r.to}`;
+    if (r.promotion) t += ` and becomes a ${NAME[r.promotion]}`;
+    if (r.san.endsWith('#')) t += ', checkmate'; else if (r.san.endsWith('+')) t += ', check';
+    return t;
+  }
+  // Pieces of `color` attacking `target`. A square in `ignore` counts as empty, so a king's
+  // own square doesn't shield the squares behind it from a rook or queen.
+  function attackers(g, target, color, ignore) {
+    const out = [], tf = target.charCodeAt(0) - 97, tr = +target[1] - 1;
+    const at = (f, r) => { const sq = String.fromCharCode(97 + f) + (r + 1); return sq === ignore ? null : g.get(sq) || null; };
+    for (let f = 0; f < 8; f++) for (let r = 0; r < 8; r++) {
+      const p = at(f, r); if (!p || p.color !== color) continue;
+      const df = tf - f, dr = tr - r, ax = Math.abs(df), ay = Math.abs(dr);
+      if (!ax && !ay) continue;
+      let hit = false;
+      if (p.type === 'p') hit = ax === 1 && dr === (color === 'w' ? 1 : -1);
+      else if (p.type === 'n') hit = ax * ay === 2;
+      else if (p.type === 'k') hit = Math.max(ax, ay) === 1;
+      else if ((p.type !== 'b' && (!ax || !ay)) || (p.type !== 'r' && ax === ay)) {
+        hit = true;
+        for (let k = 1; k < Math.max(ax, ay); k++) if (at(f + Math.sign(df) * k, r + Math.sign(dr) * k)) { hit = false; break; }
+      }
+      if (hit) out.push(String.fromCharCode(97 + f) + (r + 1));
+    }
+    return out;
+  }
+  const list = (a) => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  // Explain a checkmate: what gives check, and why each way out fails. Returns text and marks.
+  function whyMate(g) {
+    const c = g.turn(), o = c === 'w' ? 'b' : 'w';
+    let K = null; for (const row of g.board()) for (const p of row) if (p && p.type === 'k' && p.color === c) K = p.square;
+    const pw = (sq) => `${SIDE[g.get(sq).color] === SIDE[o] ? 'the' : SIDE[c] + "'s"} ${NAME[g.get(sq).type]} on ${sq}`;
+    const checkers = attackers(g, K, o);
+    const marks = {}, by = {}, own = [];
+    for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) {
+      const f = K.charCodeAt(0) + df, r = +K[1] + dr;
+      if ((!df && !dr) || f < 97 || f > 104 || r < 1 || r > 8) continue;
+      const n = String.fromCharCode(f) + r, p = g.get(n);
+      if (p && p.color === c) { own.push(n); continue; }
+      const cov = attackers(g, n, o, K);
+      if (!cov.length) continue; // can't happen in a mate
+      const who = cov.includes(checkers[0]) ? checkers[0] : cov[0];
+      (by[who] = by[who] || []).push(n); marks[n] = 'danger';
+    }
+    for (const sq of [...checkers, ...Object.keys(by)]) marks[sq] = 'hint';
+    const lines = [];
+    lines.push(checkers.length > 1
+      ? `**${list(checkers.map(pw))}** both attack the king on ${K}. That's a *double check*.`
+      : `**${pw(checkers[0])[0].toUpperCase() + pw(checkers[0]).slice(1)}** attacks the king on ${K}: check.`);
+    const moves = Object.entries(by).map(([who, sqs]) => `${list(sqs)} ${sqs.length > 1 ? 'are' : 'is'} covered by ${pw(who)}.`);
+    if (own.length) moves.push(`${list(own)} ${own.length > 1 ? 'are' : 'is'} blocked by ${SIDE[c]}'s own ${own.length > 1 ? 'pieces' : 'piece'}.`);
+    if (!moves.length) moves.push('It is in the corner with nowhere to go.');
+    lines.push(`- **Move the king?** No. ${moves.join(' ')} (The red squares.)`);
+    if (checkers.length > 1) {
+      lines.push('- **Capture or block?** Not enough: with two pieces giving check, only a king move could help, and there isn\'t one.');
+    } else {
+      const ch = checkers[0], chp = g.get(ch);
+      const takers = attackers(g, ch, c);
+      let cap;
+      if (!takers.length) cap = `No. Nothing of ${SIDE[c]}'s can reach ${ch}.`;
+      else if (takers.length === 1 && takers[0] === K) cap = `No. The king can't take it, because ${pw(attackers(g, ch, o, K).find((x) => x !== ch) || ch)} guards it.`;
+      else cap = 'No. The pieces that could reach it can\'t legally move there.';
+      lines.push(`- **Capture ${pw(ch)}?** ${cap}`);
+      const ax = Math.abs(ch.charCodeAt(0) - K.charCodeAt(0)), ay = Math.abs(+ch[1] - +K[1]);
+      let blk;
+      if (chp.type === 'n') blk = 'No. A knight jumps, so its check can\'t be blocked.';
+      else if (Math.max(ax, ay) === 1) blk = 'No. It\'s right next to the king, so there\'s no gap to block.';
+      else blk = `No. Nothing of ${SIDE[c]}'s can get between ${ch} and ${K}.`;
+      lines.push(`- **Block?** ${blk}`);
+    }
+    return { text: [lines[0], lines.slice(1).join('\n'), 'No way out, so it\'s **checkmate**.'].join('\n\n'), marks };
+  }
+  const whyBlock = (g) => { const w = whyMate(g); return { marks: w.marks, html: `<details class="why" open><summary>Why is it checkmate?</summary>${md(w.text)}</details>` }; };
 
   // ---------------------------------------------------------------- Board
   const board = {
@@ -1088,6 +1314,7 @@ function startApp(Chess) {
   board.el.addEventListener('pointerdown', async (e) => {
     const s = e.target.closest('[data-sq]'); if (!s) return;
     const sq = s.dataset.sq;
+    if (board.tap) { e.preventDefault(); board.tap(sq); return; }
     if (board.sel && board.sel !== sq && board.targets().some((m) => m.to === sq)) { e.preventDefault(); await board.attempt(board.sel, sq); return; }
     if (board.canTouch(sq)) {
       e.preventDefault();
@@ -1126,7 +1353,7 @@ function startApp(Chess) {
 
     // Delayed steps are dropped if the screen changed in the meantime.
   let epoch = 0;
-  const bump = () => { epoch++; };
+  const bump = () => { epoch++; board.tap = null; closeTerm(); };
   const later = (fn, ms) => { const e = epoch; setTimeout(() => { if (e === epoch) fn(); }, ms); };
   const panel = $('#panel');
   const main = $('#main');
@@ -1142,6 +1369,41 @@ function startApp(Chess) {
     return `After that, ${SIDE[new Chess(fen).turn() === 'w' ? 'b' : 'w']} plays <b>${esc(w.reply)}</b> and wins your ${w.lost}.`;
   }
 
+  // ---------------------------------------------------------------- Words and squares
+  // Tapping a linked word opens a short definition; tapping a square name lights it up.
+  const termbox = $('#termbox');
+  let lit = null; // { marks, prev } while squares are lit for a word or square name
+  function light(marks) {
+    unlight();
+    if (!main.classList.contains('with-board')) return;
+    lit = { prev: board.marks, marks: Object.assign({}, board.marks, marks) };
+    board.marks = lit.marks; board.render();
+  }
+  function unlight() { if (lit && board.marks === lit.marks) { board.marks = lit.prev; board.render(); } lit = null; }
+  function closeTerm() { if (termbox && !termbox.hidden) { termbox.hidden = true; unlight(); } }
+  function openTerm(name, hl) {
+    const g = GLOSSARY.find((x) => x.term === name); if (!g) return;
+    termbox.innerHTML = `<div class="term-card"><p><b>${esc(g.term[0].toUpperCase() + g.term.slice(1))}</b>: ${md(g.text, false).replace(/^<p>|<\/p>$/g, '')}</p>
+      <div class="row"><button class="link" data-words>All chess words</button><span class="grow"></span><button class="ghost-btn" data-close>Got it</button></div></div>`;
+    termbox.hidden = false;
+    const code = hl || g.hl;
+    if (code) light(hlMarks(code));
+  }
+  let flashTimer = null;
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('.term, .sqref, #termbox [data-close], [data-words]');
+    if (!t) { if (!e.target.closest('#termbox') && !e.target.closest('#board')) closeTerm(); return; }
+    if (t.matches('[data-close]')) return closeTerm();
+    if (t.matches('[data-words]')) { closeTerm(); setTab('learn'); return Learn.words(); }
+    e.stopPropagation();
+    if (t.classList.contains('term')) return openTerm(t.dataset.term, t.dataset.hl);
+    closeTerm();
+    light({ [t.dataset.sq]: 'spot' });
+    clearTimeout(flashTimer);
+    const mine = lit;
+    flashTimer = setTimeout(() => { if (lit === mine) unlight(); }, 2200);
+  }, true);
+
   // ---------------------------------------------------------------- Learn
   const Learn = {
     lesson: null, step: 0, solved: false, msg: '', drill: null, walk: null, showBox: store.get('cc.box', true),
@@ -1150,10 +1412,19 @@ function startApp(Chess) {
       bump(); layout(false);
       this.lesson = null;
       const groups = [...new Set(LESSONS.map((l) => l.group))];
-      panel.innerHTML = `<div class="intro"><h2>Learn</h2><p>Short lessons, each with a position to try. Take them in order, starting with the habits that win the most games.</p></div>` +
+      panel.innerHTML = `<div class="intro"><h2>Learn</h2><p>Short lessons, each with a position to try. Take them in order. If you're new, begin with <b>Start here</b>: it covers the names of the squares and how moves are written.</p>
+        <p>Words like <button class="term" data-term="file">file</button> or <button class="term" data-term="fork">fork</button> are underlined everywhere in the app: tap one to see what it means. Inside a lesson or puzzle, tap a square name like <button class="sqref" data-sq="e4">e4</button> to light it up on the board.</p>
+        <div class="row"><button class="ghost-btn" data-words>All chess words</button></div></div>` +
         groups.map((gname) => `<h3 class="group">${esc(gname)}</h3><div class="cards">` + LESSONS.filter((l) => l.group === gname).map((l) =>
           `<button class="card" data-lesson="${l.id}"><span class="card-title">${esc(l.title)}</span><span class="card-meta">${l.steps.length} steps${progress.lessons[l.id] ? '<span class="tick">✓ done</span>' : ''}</span></button>`).join('') + '</div>').join('');
       panel.onclick = (e) => { const b = e.target.closest('[data-lesson]'); if (b) this.open(b.dataset.lesson); };
+    },
+    words() {
+      bump(); layout(false);
+      this.lesson = null;
+      panel.innerHTML = `<div class="crumbs"><button data-act="list" class="link">← All lessons</button></div><div class="intro"><h2>Chess words</h2><p>The words this app uses, in plain English.</p></div>
+        <dl class="glossary">${GLOSSARY.map((g) => `<dt>${esc(g.term)}</dt><dd>${md(g.text, false)}</dd>`).join('')}</dl>`;
+      panel.onclick = (e) => { if (e.target.closest('[data-act="list"]')) this.list(); };
     },
     open(id) { this.lesson = LESSONS.find((l) => l.id === id); this.step = 0; this.showStep(); },
     get cur() { return this.lesson.steps[this.step]; },
@@ -1167,7 +1438,11 @@ function startApp(Chess) {
       const turn = new Chess(fen).turn();
       board.onMove = (mv) => this.onMove(mv);
       if (st.kind === 'drill') this.drill = { g: new Chess(fen), moves: 0, over: false, prevKind: '', seen: new Set([T.key(fen)]) };
-      board.set({ fen, last: null, marks: this.drill ? this.boxMarks(fen) : {}, orientation: st.kind === 'read' ? 'w' : turn, interactive: st.kind === 'read' ? null : turn, busy: false });
+      this.why = st.why ? whyMate(new Chess(fen)) : null;
+      const still = st.kind === 'read' || st.kind === 'tap';
+      let marks = this.drill ? this.boxMarks(fen) : this.why ? this.why.marks : st.hl ? hlMarks(st.hl, 'line') : {};
+      board.set({ fen, last: null, marks, orientation: still ? 'w' : turn, interactive: still ? null : turn, busy: false });
+      if (st.kind === 'tap') { this.tapI = 0; this.tapOk = {}; board.tap = (sq) => this.onTap(sq); }
       this.render();
     },
     // Shade the squares the defending king can still reach (the "box").
@@ -1185,7 +1460,8 @@ function startApp(Chess) {
       const last = this.step === L.steps.length - 1;
       const turn = new Chess(fenOf(st.fen)).turn();
       let task = '';
-      if (st.kind !== 'read') task = `<p class="task">${SIDE[turn]} to move.</p>`;
+      if (st.kind === 'tap') task = this.solved ? '' : `<p class="task tap-task">Tap <b>${st.squares[this.tapI]}</b> <span class="muted">(${this.tapI + 1} of ${st.squares.length})</span></p>`;
+      else if (st.kind !== 'read') task = `<p class="task">${SIDE[turn]} to move.</p>`;
       let icons = '';
       if (st.icons === 'values') icons = '<div class="values">' + [['P', 1], ['N', 3], ['B', 3], ['R', 5], ['Q', 9]].map(([p, v]) => `<div>${pieceImg('w' + p)}<b>${v}</b></div>`).join('') + '</div>';
       let drill = '';
@@ -1195,7 +1471,7 @@ function startApp(Chess) {
       const drillTools = st.kind === 'drill' ? `<div class="row">${this.drill.over ? '' : '<button data-act="dhint" class="ghost-btn">Hint</button>'}<button data-act="walk" class="${this.drill.over && !this.solved ? 'primary' : 'ghost-btn'}">Show me how</button>
           <label class="check inline"><input type="checkbox" data-act="box" ${this.showBox ? 'checked' : ''}><span>Shade the king's box</span></label></div>` : '';
       panel.innerHTML = `<div class="crumbs"><button data-act="list" class="link">← All lessons</button><span>${esc(L.group)} · step ${this.step + 1} of ${L.steps.length}</span></div>
-        <h2>${esc(L.title)}</h2>${icons}<div class="prose">${md(st.text)}</div>${task}${drill}
+        <h2>${esc(L.title)}</h2>${icons}<div class="prose">${md(st.text)}${this.why ? md(this.why.text) : ''}</div>${task}${drill}
         ${this.msg}${drillTools}
         <div class="row">${this.step > 0 ? '<button data-act="prev" class="ghost-btn">Back</button>' : ''}${showBtn}${retry}
           <span class="grow"></span>
@@ -1216,6 +1492,22 @@ function startApp(Chess) {
         }
       };
     },
+    onTap(sq) {
+      const st = this.cur, want = st.squares[this.tapI];
+      if (this.solved) return;
+      if (sq === want) {
+        this.tapOk[sq] = 'hint';
+        this.tapI++;
+        if (this.tapI >= st.squares.length) { this.solved = true; board.tap = null; this.msg = feedback('good', 'All correct. You can find any square now: letter along the bottom, number up the side.'); }
+        else this.msg = feedback('good', `Yes, that's ${want}.`);
+        board.set({ marks: Object.assign({}, this.tapOk) });
+      } else {
+        const ord = (n) => n + (['th', 'st', 'nd', 'rd'][n] || 'th');
+        this.msg = feedback('bad', `That's <b>${sq}</b>: the ${sq[0]}-file, ${ord(+sq[1])} rank. For <b>${want}</b>, find the letter <b>${want[0]}</b> along the bottom, then go up to row <b>${want[1]}</b>.`);
+        board.set({ marks: Object.assign({}, this.tapOk, { [sq]: 'danger', [want]: undefined }) });
+      }
+      this.render();
+    },
     showMe() {
       const st = this.cur, fen = fenOf(st.fen);
       let san = st.accept ? st.accept[0] : null;
@@ -1228,8 +1520,9 @@ function startApp(Chess) {
     },
     succeed(fen, r, html) {
       this.solved = true;
-      board.set({ fen, last: r, interactive: null, marks: {} });
-      this.msg = feedback('good', html);
+      const g = new Chess(fen), w = g.isCheckmate() ? whyBlock(g) : null;
+      board.set({ fen, last: r, interactive: null, marks: w ? w.marks : {} });
+      this.msg = feedback('good', html + (w ? w.html : ''));
       this.render();
     },
     bounce(fenBefore, t, html) {
@@ -1249,7 +1542,9 @@ function startApp(Chess) {
       if (st.kind === 'move') {
         if (st.accept.some((a) => stripSan(a) === stripSan(san))) return this.succeed(t.g.fen(), t.r, md(st.done));
         const w = st.wrong && Object.keys(st.wrong).find((k) => stripSan(k) === stripSan(san));
-        if (w) return this.bounce(fen, t, md(st.wrong[w]));
+        const said = st.say ? `You played <b>${esc(san)}</b>: ${describe(t.r)}. ` : '';
+        if (w) return this.bounce(fen, t, said + md(st.wrong[w]));
+        if (st.say) return this.bounce(fen, t, said + 'That\'s not the one asked for. Read the move again: the capital letter is the piece, the letter and number at the end are the square it goes to.');
         const why = explainBad(fen, mv);
         return this.bounce(fen, t, (why ? why + ' ' : '') + (st.other ? md(st.other) : 'Not quite. Have another look.'));
       }
@@ -1356,7 +1651,7 @@ function startApp(Chess) {
       const lastMv = d.g.history({ verbose: true }).slice(-1)[0];
       board.set({ fen: d.g.fen(), last: lastMv, busy: true, marks: this.boxMarks(d.g.fen()) });
       d.seen.add(T.key(d.g.fen()));
-      if (d.g.isCheckmate()) return finish(true, md(st.done));
+      if (d.g.isCheckmate()) { const w = whyBlock(d.g); finish(true, md(st.done) + w.html); return board.set({ marks: w.marks }); }
       if (d.g.isStalemate()) return finish(false, md('**Stalemate.** The king isn\'t in check but has no move, so the game is a draw. Leave it a square before you make a quiet move. Press *Start over*.'));
       if (d.g.isDraw()) return finish(false, 'That position is a draw. Press <i>Start over</i> to try again.');
       if (d.moves >= st.limit) return finish(false, `That's ${st.limit} moves. Press <i>Start over</i> and box the king in faster.`);
@@ -1415,7 +1710,7 @@ function startApp(Chess) {
         if (act === 'list') this.list();
         if (act === 'retry') this.open(P.id);
         if (act === 'next') this.open(PUZZLES[i + 1].id);
-        if (act === 'hint') { this.helped = true; this.msg = feedback('hint', esc(P.hint)); this.render(); }
+        if (act === 'hint') { this.helped = true; this.msg = feedback('hint', md(P.hint)); this.render(); }
         if (act === 'solve') this.solve();
       };
     },
@@ -1427,7 +1722,7 @@ function startApp(Chess) {
       if (!san || !tryMove(fen, san)) { const h = this.p.theme.startsWith('mate') ? E.mateMoves(fen, this.p.theme === 'mate2' ? 2 - this.ply / 2 : 1)[0] : E.bestMove(fen, 3).move; san = h && tryMove(fen, h).r.san; }
       const t = tryMove(fen, san);
       board.set({ marks: { [t.r.from]: 'hint', [t.r.to]: 'hint' } });
-      this.msg = feedback('hint', `The move is <b>${esc(t.r.san)}</b>. Play it on the board.`);
+      this.msg = feedback('hint', `The move is <b>${esc(t.r.san)}</b>: ${describe(t.r)}. Play it on the board.`);
       this.render();
     },
     accepts(t) {
@@ -1487,9 +1782,10 @@ function startApp(Chess) {
       const prev = progress.puzzles[this.p.id];
       progress.puzzles[this.p.id] = (prev === 'clean' || !this.helped) ? 'clean' : 'helped';
       saveProgress();
-      board.set({ fen: this.g.fen(), last: r, interactive: null, busy: false, marks: {} });
-      const line = this.g.history().join(' ');
-      this.msg = feedback('good', `<b>Solved!</b> ${this.g.isCheckmate() ? 'Checkmate.' : 'You win material.'} ${this.helped ? '' : 'First try.'}<br><span class="muted">Line: ${esc(line)}</span>`);
+      const w = this.g.isCheckmate() ? whyBlock(this.g) : null;
+      board.set({ fen: this.g.fen(), last: r, interactive: null, busy: false, marks: w ? w.marks : {} });
+      const line = this.g.history({ verbose: true }).map((m) => `<li><b>${esc(m.san)}</b>: ${describe(m)}</li>`).join('');
+      this.msg = feedback('good', `<b>Solved!</b> ${this.g.isCheckmate() ? 'Checkmate.' : 'You win material.'} ${this.helped ? '' : 'First try.'}<ul class="line">${line}</ul>`) + (w ? w.html : '');
       this.render();
     },
   };
