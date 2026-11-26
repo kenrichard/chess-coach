@@ -1,0 +1,1493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Chess Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: header with four tabs; below it the board on the left and the lesson / puzzle / game
+   panel on the right (stacked on phones). List screens hide the board and use the full width.
+   Palette: walnut and cream board, ink-blue accents. */
+:root {
+  --bg: #f4f1ea; --panel: #fffdf8; --ink: #1d2430; --muted: #5d6674; --line: #ddd6c8;
+  --accent: #2f5d8a; --accent-ink: #fff; --accent-soft: #e3ecf5;
+  --good: #2e7d4f; --good-soft: #e2f1e7; --bad: #b3362b; --bad-soft: #f8e4e1;
+  --hint: #2f6fb3; --hint-soft: #e2edf8; --warn-soft: #fbf0d6; --warn-line: #d9a93a;
+  --sq-light: #ecdcbf; --sq-dark: #a7805a; --sq-last: rgba(214, 170, 40, .45); --sq-sel: rgba(60, 120, 200, .45);
+  --shadow: 0 1px 2px rgba(30, 25, 15, .12), 0 4px 14px rgba(30, 25, 15, .08);
+  --f-display: "Fraunces", Georgia, serif;
+  --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171c; --panel: #1c2027; --ink: #e6e8ec; --muted: #9aa3b0; --line: #2e343e;
+    --accent: #6fa3d8; --accent-ink: #0d1520; --accent-soft: #1f2c3b;
+    --good: #6cc792; --good-soft: #1c3226; --bad: #ef7d70; --bad-soft: #3a2220;
+    --hint: #7fb2ea; --hint-soft: #1d2a3a; --warn-soft: #3a3020; --warn-line: #c99a35;
+    --sq-light: #d9c6a3; --sq-dark: #8e6a48;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171c; --panel: #1c2027; --ink: #e6e8ec; --muted: #9aa3b0; --line: #2e343e;
+  --accent: #6fa3d8; --accent-ink: #0d1520; --accent-soft: #1f2c3b;
+  --good: #6cc792; --good-soft: #1c3226; --bad: #ef7d70; --bad-soft: #3a2220;
+  --hint: #7fb2ea; --hint-soft: #1d2a3a; --warn-soft: #3a3020; --warn-line: #c99a35;
+  --sq-light: #d9c6a3; --sq-dark: #8e6a48;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--f-body); min-height: 100vh; }
+button { font: inherit; color: inherit; }
+header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+header h1 { font: 700 22px/1 var(--f-display); margin: 0; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+header h1 img { width: 28px; height: 28px; }
+nav { display: flex; gap: 4px; margin-left: auto; }
+nav button { background: none; border: 0; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 700; }
+nav button:hover { background: var(--accent-soft); color: var(--ink); }
+nav button[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 520px) { header { gap: 8px; } nav { margin-left: 0; width: 100%; justify-content: space-between; } nav button { flex: 1; padding: 8px 4px; } }
+
+#main { max-width: 1120px; margin: 0 auto; padding: 16px; display: block; }
+#main .board-wrap { display: none; }
+#main.with-board { display: grid; grid-template-columns: minmax(0, 600px) minmax(300px, 1fr); gap: 24px; align-items: start; }
+#main.with-board .board-wrap { display: block; position: sticky; top: 76px; }
+@media (max-width: 860px) {
+  #main.with-board { grid-template-columns: 1fr; gap: 14px; }
+  #main.with-board .board-wrap { position: static; max-width: min(600px, calc(100vh - 150px)); width: 100%; margin: 0 auto; }
+}
+@media (max-width: 860px) and (max-height: 500px) { #main.with-board .board-wrap { max-width: 420px; } }
+
+/* Board */
+.board-wrap { position: relative; }
+#board { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); aspect-ratio: 1; width: 100%; border-radius: 6px; overflow: hidden; box-shadow: var(--shadow); user-select: none; -webkit-user-select: none; touch-action: none; }
+.sq { position: relative; min-width: 0; min-height: 0; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+.sq.light { background: var(--sq-light); } .sq.dark { background: var(--sq-dark); }
+.sq.last::before, .sq.sel::before, .sq[class*="mark-"]::before { content: ""; position: absolute; inset: 0; }
+.sq.last::before { background: var(--sq-last); }
+.sq.sel::before { background: var(--sq-sel); }
+.sq.mark-hint::before { box-shadow: inset 0 0 0 4px var(--hint); background: rgba(47, 111, 179, .18); }
+.sq.mark-danger::before { box-shadow: inset 0 0 0 4px var(--bad); background: rgba(179, 54, 43, .22); }
+.sq.check { background-image: radial-gradient(circle, rgba(230, 40, 30, .9) 0%, rgba(230, 40, 30, .5) 40%, transparent 72%); }
+.sq img { position: relative; width: 92%; height: 92%; pointer-events: none; }
+.sq.lifted img { opacity: .3; }
+#board.live .sq { cursor: pointer; }
+.t-dot { position: absolute; width: 28%; height: 28%; border-radius: 50%; background: rgba(20, 30, 50, .3); pointer-events: none; }
+.t-cap { position: absolute; inset: 4%; border-radius: 50%; box-shadow: inset 0 0 0 5px rgba(20, 30, 50, .32); pointer-events: none; }
+.coord { position: absolute; font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; opacity: .8; }
+.coord.rank { top: 3px; left: 3px; } .coord.file { bottom: 3px; right: 4px; }
+.sq.light .coord { color: var(--sq-dark); } .sq.dark .coord { color: var(--sq-light); }
+.ghost { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50; }
+.ghost img { width: 100%; height: 100%; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .35)); }
+#promo { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 15, 25, .45); border-radius: 6px; z-index: 3; }
+#promo[hidden] { display: none; }
+.promo-card { background: var(--panel); padding: 12px 16px; border-radius: 10px; box-shadow: var(--shadow); text-align: center; }
+.promo-card p { margin: 0 0 6px; font-weight: 700; }
+.promo-card button { background: var(--sq-light); border: 0; border-radius: 8px; margin: 3px; width: 64px; height: 64px; cursor: pointer; }
+.promo-card button:hover { outline: 3px solid var(--accent); }
+.promo-card img { width: 100%; height: 100%; }
+
+/* Panel */
+#panel { min-width: 0; }
+#main.with-board #panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+h2 { font: 700 26px/1.15 var(--f-display); margin: 4px 0 10px; letter-spacing: -.01em; }
+.intro { max-width: 680px; } .intro p { color: var(--muted); margin-top: 0; }
+h3.group { font: 700 13px/1 var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.cards.small { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.card { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; box-shadow: var(--shadow); transition: transform .08s, border-color .08s; }
+.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.card-title { font-weight: 700; font-size: 17px; }
+.card-blurb { color: var(--muted); font-size: 14px; }
+.card-meta { color: var(--muted); font-size: 13px; display: flex; gap: 10px; align-items: center; margin-top: auto; padding-top: 4px; }
+.tick { color: var(--good); font-weight: 700; }
+.crumbs { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-weight: 700; }
+.prose p, .prose ul, .prose ol { margin: 0 0 10px; } .prose ul, .prose ol { padding-left: 22px; } .prose li { margin: 3px 0; }
+.task { font-weight: 700; margin: 12px 0 8px; }
+.tag { display: inline-block; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; padding: 2px 10px; border-radius: 99px; margin: 0; }
+.muted { color: var(--muted); } .small { font-size: 14px; }
+.counter { margin: 6px 0; }
+.fb { border-radius: 10px; padding: 10px 14px; margin: 12px 0; border-left: 4px solid; }
+.fb p { margin: 0 0 6px; } .fb p:last-child { margin: 0; }
+.fb-good { background: var(--good-soft); border-color: var(--good); }
+.fb-bad { background: var(--bad-soft); border-color: var(--bad); }
+.fb-hint, .fb-info { background: var(--hint-soft); border-color: var(--hint); }
+.warn { background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: 10px; padding: 12px 14px; margin: 12px 0; }
+.warn p { margin: 0 0 8px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.grow { flex: 1; }
+.primary, .ghost-btn { border-radius: 8px; padding: 9px 16px; cursor: pointer; font-weight: 700; border: 1px solid var(--accent); }
+.primary { background: var(--accent); color: var(--accent-ink); }
+.ghost-btn { background: transparent; color: var(--accent); }
+.ghost-btn:hover { background: var(--accent-soft); }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.values { display: flex; gap: 10px; margin: 6px 0 12px; flex-wrap: wrap; }
+.values div { display: flex; flex-direction: column; align-items: center; background: var(--sq-light); border-radius: 8px; padding: 4px 8px 6px; color: #2a2015; }
+.values img { width: 44px; height: 44px; }
+.notes { list-style: none; padding: 0; margin: 16px 0 0; max-height: 360px; overflow: auto; border-top: 1px solid var(--line); }
+.notes li { padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: 15px; color: var(--muted); }
+.notes li b { color: var(--ink); margin-right: 4px; }
+.notes li.latest { color: var(--ink); background: var(--accent-soft); border-radius: 6px; }
+.movelist { list-style: none; padding: 0; margin: 14px 0 6px; max-height: 220px; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); border-top: 1px solid var(--line); padding-top: 8px; }
+.movelist li { display: grid; grid-template-columns: 34px 1fr 1fr; font-variant-numeric: tabular-nums; padding: 2px 0; }
+.mn { color: var(--muted); }
+.material { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin-top: 14px; font-size: 14px; }
+.material .label { display: block; color: var(--muted); }
+.material .caps { display: flex; flex-wrap: wrap; min-height: 22px; }
+.material .caps img { width: 22px; height: 22px; margin-right: -6px; }
+.material .score { grid-column: 1 / -1; }
+.newgame { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 12px; }
+fieldset { border: 0; padding: 0; margin: 0 0 12px; }
+legend { font-weight: 700; margin-bottom: 6px; }
+.seg { display: flex; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; width: fit-content; }
+.seg label { cursor: pointer; } .seg input { position: absolute; opacity: 0; }
+.seg span { display: block; padding: 6px 14px; }
+.seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: -3px; }
+.lvl, .check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+.lvl input, .check input { margin-top: 5px; accent-color: var(--accent); }
+.lvl small, .check small { display: block; color: var(--muted); font-size: 13px; }
+footer { max-width: 1120px; margin: 10px auto 30px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+#loading { padding: 40px 16px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1><img id="logo" alt="">Chess Coach</h1>
+  <nav aria-label="Sections">
+    <button data-tab="learn">Learn</button>
+    <button data-tab="puzzles">Puzzles</button>
+    <button data-tab="openings">Openings</button>
+    <button data-tab="play">Play</button>
+  </nav>
+</header>
+<div id="main">
+  <div class="board-wrap"><div id="board" aria-label="Chess board"></div><div id="promo" hidden></div></div>
+  <div id="panel"><p id="loading">Loading…</p></div>
+</div>
+<footer>Piece images: Colin M.L. Burnett ("cburnett"), CC BY-SA 3.0. Rules: chess.js.</footer>
+<script>
+const PIECES = {
+"bB": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48ZyBmaWxsPSIjMDAwIiBzdHJva2UtbGluZWNhcD0iYnV0dCI+PHBhdGggZD0iTTkgMzZjMy40LTEgMTAuMS40IDEzLjUtMiAzLjQgMi40IDEwLjEgMSAxMy41IDIgMCAwIDEuNi41IDMgMi0uNyAxLTEuNiAxLTMgLjUtMy40LTEtMTAuMS41LTEzLjUtMS0zLjQgMS41LTEwLjEgMC0xMy41IDEtMS40LjUtMi4zLjUtMy0uNSAxLjQtMiAzLTIgMy0yeiIvPjxwYXRoIGQ9Ik0xNSAzMmMyLjUgMi41IDEyLjUgMi41IDE1IDAgLjUtMS41IDAtMiAwLTIgMC0yLjUtMi41LTQtMi41LTQgNS41LTEuNSA2LTExLjUtNS0xNS41LTExIDQtMTAuNSAxNC01IDE1LjUgMCAwLTIuNSAxLjUtMi41IDQgMCAwLS41LjUgMCAyeiIvPjxwYXRoIGQ9Ik0yNSA4YTIuNSAyLjUgMCAxIDEtNSAwIDIuNSAyLjUgMCAxIDEgNSAweiIvPjwvZz48cGF0aCBzdHJva2U9IiNlY2VjZWMiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIGQ9Ik0xNy41IDI2aDEwTTE1IDMwaDE1bS03LjUtMTQuNXY1TTIwIDE4aDUiLz48L2c+PC9zdmc+",
+"bK": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgdmlld0JveD0iMCAwIDQ1IDQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSI+PHBhdGggc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTIyLjUgMTEuNlY2Ii8+PHBhdGggZmlsbD0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIGQ9Ik0yMi41IDI1czQuNS03LjUgMy0xMC41YzAgMC0xLTIuNS0zLTIuNXMtMyAyLjUtMyAyLjVjLTEuNSAzIDMgMTAuNSAzIDEwLjUiLz48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMTEuNSAzN2EyMi4zIDIyLjMgMCAwIDAgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMHoiLz48cGF0aCBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMjAgOGg1Ii8+PHBhdGggc3Ryb2tlPSIjZWNlY2VjIiBkPSJNMzIgMjkuNXM4LjUtNCA2LTkuN0MzNC4xIDE0IDI1IDE4IDIyLjUgMjQuNnYyLjEtMi4xQzIwIDE4IDkuOSAxNCA3IDE5LjljLTIuNSA1LjYgNC44IDkgNC44IDkiLz48cGF0aCBzdHJva2U9IiNlY2VjZWMiIGQ9Ik0xMS41IDMwYzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDBtLTIxIDMuNWM1LjUtMyAxNS41LTMgMjEgMCIvPjwvZz48L3N2Zz4=",
+"bN": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMjIgMTBjMTAuNSAxIDE2LjUgOCAxNiAyOUgxNWMwLTkgMTAtNi41IDgtMjEiLz48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMjQgMThjLjM4IDIuOTEtNS41NSA3LjM3LTggOS0zIDItMi44MiA0LjM0LTUgNC0xLjA0LS45NCAxLjQxLTMuMDQgMC0zLTEgMCAuMTkgMS4yMy0xIDItMSAwLTQgMS00LTQgMC0yIDYtMTIgNi0xMnMxLjg5LTEuOSAyLTMuNWMtLjczLTEtLjUtMi0uNS0zIDEtMSAzIDIuNSAzIDIuNWgycy43OC0yIDIuNS0zYzEgMCAxIDMgMSAzIi8+PHBhdGggZmlsbD0iI2VjZWNlYyIgc3Ryb2tlPSIjZWNlY2VjIiBkPSJNOS41IDI1LjVhLjUuNSAwIDEgMS0xIDAgLjUuNSAwIDEgMSAxIDBtNS40My05Ljc1YS41IDEuNSAzMCAxIDEtLjg2LS41LjUgMS41IDMwIDEgMSAuODYuNSIvPjxwYXRoIGZpbGw9IiNlY2VjZWMiIHN0cm9rZT0ibm9uZSIgZD0ibTI0LjU1IDEwLjQtLjQ1IDEuNDUuNS4xNWMzLjE1IDEgNS42NSAyLjQ5IDcuOSA2Ljc1UzM1Ljc1IDI5LjA2IDM1LjI1IDM5bC0uMDUuNWgyLjI1bC4wNS0uNWMuNS0xMC4wNi0uODgtMTYuODUtMy4yNS0yMS4zNHMtNS43OS02LjY0LTkuMTktNy4xNnoiLz48L2c+PC9zdmc+",
+"bP": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxwYXRoIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSIgZD0iTTIyLjUgOWE0IDQgMCAwIDAtMy4yMiA2LjM4IDYuNDggNi40OCAwIDAgMC0uODcgMTAuNjVjLTMgMS4wNi03LjQxIDUuNTUtNy40MSAxMy40N2gyM2MwLTcuOTItNC40MS0xMi40MS03LjQxLTEzLjQ3YTYuNDYgNi40NiAwIDAgMC0uODctMTAuNjVBNC4wMSA0LjAxIDAgMCAwIDIyLjUgOXoiLz48L3N2Zz4=",
+"bQ": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48ZyBzdHJva2U9Im5vbmUiPjxjaXJjbGUgY3g9IjYiIGN5PSIxMiIgcj0iMi43NSIvPjxjaXJjbGUgY3g9IjE0IiBjeT0iOSIgcj0iMi43NSIvPjxjaXJjbGUgY3g9IjIyLjUiIGN5PSI4IiByPSIyLjc1Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI5IiByPSIyLjc1Ii8+PGNpcmNsZSBjeD0iMzkiIGN5PSIxMiIgcj0iMi43NSIvPjwvZz48cGF0aCBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTkgMjZjOC41LTEuNSAyMS0xLjUgMjcgMGwyLjUtMTIuNUwzMSAyNWwtLjMtMTQuMS01LjIgMTMuNi0zLTE0LjUtMyAxNC41LTUuMi0xMy42TDE0IDI1IDYuNSAxMy41eiIvPjxwYXRoIHN0cm9rZS1saW5lY2FwPSJidXR0IiBkPSJNOSAyNmMwIDIgMS41IDIgMi41IDQgMSAxLjUgMSAxIC41IDMuNS0xLjUgMS0xLjUgMi41LTEuNSAyLjUtMS41IDEuNS41IDIuNS41IDIuNSA2LjUgMSAxNi41IDEgMjMgMCAwIDAgMS41LTEgMC0yLjUgMCAwIC41LTEuNS0xLTIuNS0uNS0yLjUtLjUtMiAuNS0zLjUgMS0yIDIuNS0yIDIuNS00LTguNS0xLjUtMTguNS0xLjUtMjcgMHoiLz48cGF0aCBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTExIDM4LjVhMzUgMzUgMSAwIDAgMjMgMCIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2VjZWNlYyIgZD0iTTExIDI5YTM1IDM1IDEgMCAxIDIzIDBtLTIxLjUgMi41aDIwbS0yMSAzYTM1IDM1IDEgMCAwIDIyIDBtLTIzIDNhMzUgMzUgMSAwIDAgMjQgMCIvPjwvZz48L3N2Zz4=",
+"bR": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTkgMzloMjd2LTNIOXptMy41LTcgMS41LTIuNWgxN2wxLjUgMi41em0tLjUgNHYtNGgyMXY0eiIvPjxwYXRoIHN0cm9rZS1saW5lY2FwPSJidXR0IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMTQgMjkuNXYtMTNoMTd2MTN6Ii8+PHBhdGggc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIGQ9Ik0xNCAxNi41IDExIDE0aDIzbC0zIDIuNXpNMTEgMTRWOWg0djJoNVY5aDV2Mmg1VjloNHY1eiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2VjZWNlYyIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgc3Ryb2tlLXdpZHRoPSIxIiBkPSJNMTIgMzUuNWgyMW0tMjAtNGgxOW0tMTgtMmgxN20tMTctMTNoMTdNMTEgMTRoMjMiLz48L2c+PC9zdmc+",
+"wB": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48ZyBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCI+PHBhdGggZD0iTTkgMzZjMy4zOS0uOTcgMTAuMTEuNDMgMTMuNS0yIDMuMzkgMi40MyAxMC4xMSAxLjAzIDEzLjUgMiAwIDAgMS42NS41NCAzIDItLjY4Ljk3LTEuNjUuOTktMyAuNS0zLjM5LS45Ny0xMC4xMS40Ni0xMy41LTEtMy4zOSAxLjQ2LTEwLjExLjAzLTEzLjUgMS0xLjM1LjQ5LTIuMzIuNDctMy0uNSAxLjM1LTEuOTQgMy0yIDMtMnoiLz48cGF0aCBkPSJNMTUgMzJjMi41IDIuNSAxMi41IDIuNSAxNSAwIC41LTEuNSAwLTIgMC0yIDAtMi41LTIuNS00LTIuNS00IDUuNS0xLjUgNi0xMS41LTUtMTUuNS0xMSA0LTEwLjUgMTQtNSAxNS41IDAgMC0yLjUgMS41LTIuNSA0IDAgMC0uNS41IDAgMnoiLz48cGF0aCBkPSJNMjUgOGEyLjUgMi41IDAgMSAxLTUgMCAyLjUgMi41IDAgMSAxIDUgMHoiLz48L2c+PHBhdGggc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTE3LjUgMjZoMTBNMTUgMzBoMTVtLTcuNS0xNC41djVNMjAgMThoNSIvPjwvZz48L3N2Zz4=",
+"wK": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgdmlld0JveD0iMCAwIDQ1IDQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSI+PHBhdGggc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTIyLjUgMTEuNjNWNk0yMCA4aDUiLz48cGF0aCBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTIyLjUgMjVzNC41LTcuNSAzLTEwLjVjMCAwLTEtMi41LTMtMi41cy0zIDIuNS0zIDIuNWMtMS41IDMgMyAxMC41IDMgMTAuNSIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0xMS41IDM3YzUuNSAzLjUgMTUuNSAzLjUgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMHoiLz48cGF0aCBkPSJNMTEuNSAzMGM1LjUtMyAxNS41LTMgMjEgMG0tMjEgMy41YzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDAiLz48L2c+PC9zdmc+",
+"wN": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMjIgMTBjMTAuNSAxIDE2LjUgOCAxNiAyOUgxNWMwLTkgMTAtNi41IDgtMjEiLz48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMjQgMThjLjM4IDIuOTEtNS41NSA3LjM3LTggOS0zIDItMi44MiA0LjM0LTUgNC0xLjA0Mi0uOTQgMS40MS0zLjA0IDAtMy0xIDAgLjE5IDEuMjMtMSAyLTEgMC00LjAwMyAxLTQtNCAwLTIgNi0xMiA2LTEyczEuODktMS45IDItMy41Yy0uNzMtLjk5NC0uNS0yLS41LTMgMS0xIDMgMi41IDMgMi41aDJzLjc4LTEuOTkyIDIuNS0zYzEgMCAxIDMgMSAzIi8+PHBhdGggZmlsbD0iIzAwMCIgZD0iTTkuNSAyNS41YS41LjUgMCAxIDEtMSAwIC41LjUgMCAxIDEgMSAwbTUuNDMzLTkuNzVhLjUgMS41IDMwIDEgMS0uODY2LS41LjUgMS41IDMwIDEgMSAuODY2LjUiLz48L2c+PC9zdmc+",
+"wP": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxwYXRoIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSIgZD0iTTIyLjUgOWMtMi4yMSAwLTQgMS43OS00IDQgMCAuODkuMjkgMS43MS43OCAyLjM4QzE3LjMzIDE2LjUgMTYgMTguNTkgMTYgMjFjMCAyLjAzLjk0IDMuODQgMi40MSA1LjAzLTMgMS4wNi03LjQxIDUuNTUtNy40MSAxMy40N2gyM2MwLTcuOTItNC40MS0xMi40MS03LjQxLTEzLjQ3IDEuNDctMS4xOSAyLjQxLTMgMi40MS01LjAzIDAtMi40MS0xLjMzLTQuNS0zLjI4LTUuNjIuNDktLjY3Ljc4LTEuNDkuNzgtMi4zOCAwLTIuMjEtMS43OS00LTQtNHoiLz48L3N2Zz4=",
+"wQ": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBkPSJNOCAxMmEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDBtMTYuNS00LjVhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwTTQxIDEyYTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgME0xNiA4LjVhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwTTMzIDlhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwIi8+PHBhdGggc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIGQ9Ik05IDI2YzguNS0xLjUgMjEtMS41IDI3IDBsMi0xMi03IDExVjExbC01LjUgMTMuNS0zLTE1LTMgMTUtNS41LTE0VjI1TDcgMTR6Ii8+PHBhdGggc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIGQ9Ik05IDI2YzAgMiAxLjUgMiAyLjUgNCAxIDEuNSAxIDEgLjUgMy41LTEuNSAxLTEuNSAyLjUtMS41IDIuNS0xLjUgMS41LjUgMi41LjUgMi41IDYuNSAxIDE2LjUgMSAyMyAwIDAgMCAxLjUtMSAwLTIuNSAwIDAgLjUtMS41LTEtMi41LS41LTIuNS0uNS0yIC41LTMuNSAxLTIgMi41LTIgMi41LTQtOC41LTEuNS0xOC41LTEuNS0yNyAweiIvPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0xMS41IDMwYzMuNS0xIDE4LjUtMSAyMiAwTTEyIDMzLjVjNi0xIDE1LTEgMjEgMCIvPjwvZz48L3N2Zz4=",
+"wR": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTkgMzloMjd2LTNIOXptMy0zdi00aDIxdjR6bS0xLTIyVjloNHYyaDVWOWg1djJoNVY5aDR2NSIvPjxwYXRoIGQ9Im0zNCAxNC0zIDNIMTRsLTMtMyIvPjxwYXRoIHN0cm9rZS1saW5lY2FwPSJidXR0IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMzEgMTd2MTIuNUgxNFYxNyIvPjxwYXRoIGQ9Im0zMSAyOS41IDEuNSAyLjVoLTIwbDEuNS0yLjUiLz48cGF0aCBmaWxsPSJub25lIiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMTEgMTRoMjMiLz48L2c+PC9zdmc+"
+};
+document.getElementById('logo').src = PIECES.wN;
+</script>
+<script>
+/* Engine: computer opponent, move checker ("coach") and search used to verify puzzles.
+   Works on chess.js 1.4.0 internals (_moves, _makeMove, _undoMove, _board, _turn) for speed:
+   the public moves({verbose}) builds SAN for every move, which is far too slow for a search.
+   If chess.js is ever upgraded, rerun the Node tests. */
+function makeEngine(Chess) {
+  const VAL = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
+  const NAME = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+  const MATE = 100000;
+  const INF = 1e9;
+  const alg = (s) => 'abcdefgh'[s & 7] + (8 - (s >> 4));
+  // Piece-square bonuses, from White's side, index = rank8..rank1 * 8 + file.
+  const PST = {
+    p: [0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10, 5,5,10,25,25,10,5,5,
+        0,0,0,20,20,0,0,0, 5,-5,-10,0,0,-10,-5,5, 5,10,10,-20,-20,10,10,5, 0,0,0,0,0,0,0,0],
+    n: [-50,-40,-30,-30,-30,-30,-40,-50, -40,-20,0,0,0,0,-20,-40, -30,0,10,15,15,10,0,-30,
+        -30,5,15,20,20,15,5,-30, -30,0,15,20,20,15,0,-30, -30,5,10,15,15,10,5,-30,
+        -40,-20,0,5,5,0,-20,-40, -50,-40,-30,-30,-30,-30,-40,-50],
+    b: [-20,-10,-10,-10,-10,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,10,10,5,0,-10,
+        -10,5,5,10,10,5,5,-10, -10,0,10,10,10,10,0,-10, -10,10,10,10,10,10,10,-10,
+        -10,5,0,0,0,0,5,-10, -20,-10,-10,-10,-10,-10,-10,-20],
+    r: [0,0,0,0,0,0,0,0, 5,10,10,10,10,10,10,5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5,
+        -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, 0,0,0,5,5,0,0,0],
+    q: [-20,-10,-10,-5,-5,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,5,5,5,0,-10, -5,0,5,5,5,5,0,-5,
+        0,0,5,5,5,5,0,-5, -10,5,5,5,5,5,0,-10, -10,0,5,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20],
+    k: [-30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30, -20,-30,-30,-40,-40,-30,-30,-20, -10,-20,-20,-20,-20,-20,-20,-10,
+        20,20,0,0,0,0,20,20, 20,30,10,0,0,10,30,20],
+    ke: [-50,-40,-30,-20,-20,-30,-40,-50, -30,-20,-10,0,0,-10,-20,-30, -30,-10,20,30,30,20,-10,-30,
+         -30,-10,30,40,40,30,-10,-30, -30,-10,30,40,40,30,-10,-30, -30,-10,20,30,30,20,-10,-30,
+         -30,-30,0,0,0,0,-30,-30, -50,-30,-30,-30,-30,-30,-30,-50],
+  };
+
+  function game(fen) { return new Chess(fen); }
+
+  // Static evaluation from the side to move. `plain` = material only (the coach uses that).
+  function evaluate(g, plain) {
+    const B = g._board;
+    let score = 0, nonPawn = 0, wk = -1, bk = -1;
+    for (let s = 0; s < 120; s++) {
+      if (s & 0x88) { s += 7; continue; }
+      const p = B[s]; if (!p) continue;
+      if (p.type !== 'p' && p.type !== 'k') nonPawn += VAL[p.type];
+      if (p.type === 'k') { if (p.color === 'w') wk = s; else bk = s; }
+    }
+    const endgame = nonPawn <= 1800;
+    for (let s = 0; s < 120; s++) {
+      if (s & 0x88) { s += 7; continue; }
+      const p = B[s]; if (!p) continue;
+      let v = VAL[p.type];
+      if (!plain) {
+        const idx = (s >> 4) * 8 + (s & 7);
+        const t = p.type === 'k' && endgame ? PST.ke : PST[p.type];
+        v += p.color === 'w' ? t[idx] : t[(7 - (s >> 4)) * 8 + (s & 7)];
+      }
+      score += p.color === 'w' ? v : -v;
+    }
+    // Lone-king endings: drive the defending king to the edge and bring the kings together,
+    // so the computer can mate with K+Q or K+R (and defends by staying central).
+    if (!plain && endgame && wk >= 0 && bk >= 0) {
+      const lead = score;
+      if (Math.abs(lead) > 300) {
+        const loser = lead > 0 ? bk : wk;
+        const lf = loser & 7, lr = loser >> 4;
+        const edge = Math.max(3 - lf, lf - 4) + Math.max(3 - lr, lr - 4);
+        const dist = Math.abs((wk & 7) - (bk & 7)) + Math.abs((wk >> 4) - (bk >> 4));
+        const bonus = edge * 12 + (14 - dist) * 6;
+        score += lead > 0 ? bonus : -bonus;
+      }
+    }
+    return g._turn === 'w' ? score : -score;
+  }
+
+  function orderKey(m) {
+    let k = 0;
+    if (m.captured) k += 10 * VAL[m.captured] - VAL[m.piece] + 10000;
+    if (m.promotion) k += VAL[m.promotion] + 9000;
+    return k;
+  }
+  function ordered(g, capturesOnly) {
+    let ms = g._moves({ legal: true });
+    if (capturesOnly) ms = ms.filter((m) => m.captured || m.promotion);
+    ms.sort((a, b) => orderKey(b) - orderKey(a));
+    return ms;
+  }
+
+  function makeSearcher(opts) {
+    const plain = !!opts.plain;
+    let nodes = 0;
+    const maxNodes = opts.maxNodes || 400000;
+    function qs(g, alpha, beta, qd) {
+      nodes++;
+      const stand = evaluate(g, plain);
+      if (stand >= beta) return stand;
+      if (stand > alpha) alpha = stand;
+      if (qd <= 0 || nodes > maxNodes) return stand;
+      for (const m of ordered(g, true)) {
+        g._makeMove(m);
+        const v = -qs(g, -beta, -alpha, qd - 1);
+        g._undoMove();
+        if (v >= beta) return v;
+        if (v > alpha) alpha = v;
+      }
+      return alpha;
+    }
+    function ab(g, depth, alpha, beta, ply) {
+      nodes++;
+      const ms = ordered(g, false);
+      if (!ms.length) return g._isKingAttacked(g._turn) ? -(MATE - ply) : 0;
+      if (depth <= 0) return qs(g, alpha, beta, 6);
+      let best = -INF;
+      for (const m of ms) {
+        g._makeMove(m);
+        const v = -ab(g, depth - 1, -beta, -alpha, ply + 1);
+        g._undoMove();
+        if (v > best) best = v;
+        if (v > alpha) alpha = v;
+        if (alpha >= beta) break;
+      }
+      return best;
+    }
+    return { qs, ab, nodes: () => nodes };
+  }
+
+  function toMove(m) { return { from: alg(m.from), to: alg(m.to), promotion: m.promotion }; }
+
+  // Exact score for every legal move at the root (full window per move). Used for hints,
+  // weaker levels (score + noise) and puzzle checks.
+  function rootScores(fen, depth, opts = {}) {
+    const g = game(fen);
+    const S = makeSearcher(opts);
+    const out = [];
+    for (const m of ordered(g, false)) {
+      g._makeMove(m);
+      const v = -S.ab(g, depth - 1, -INF, INF, 1);
+      g._undoMove();
+      out.push({ move: toMove(m), score: v });
+    }
+    out.sort((a, b) => b.score - a.score);
+    return out;
+  }
+
+  // Fast best move with alpha-beta at the root.
+  function bestMove(fen, depth) {
+    const g = game(fen);
+    const S = makeSearcher({});
+    let best = null, alpha = -INF;
+    for (const m of ordered(g, false)) {
+      g._makeMove(m);
+      const v = -S.ab(g, depth - 1, -INF, -alpha, 1);
+      g._undoMove();
+      if (v > alpha || !best) { alpha = v; best = { move: toMove(m), score: v }; }
+    }
+    return best;
+  }
+
+  const LEVELS = [
+    { id: 1, name: 'First steps', blurb: 'Moves almost at random. Grabs free pieces about half the time.' },
+    { id: 2, name: 'Beginner', blurb: 'Looks one move ahead and often slips up.' },
+    { id: 3, name: 'Improving', blurb: 'Looks two moves ahead. Takes what you leave hanging.' },
+    { id: 4, name: 'Tough', blurb: 'Looks three moves ahead. Punishes most mistakes.' },
+  ];
+
+  function pickMove(fen, level, rnd = Math.random) {
+    const g = game(fen);
+    const legal = g._moves({ legal: true });
+    if (!legal.length) return null;
+    if (level <= 1) {
+      // Mate in one or a free capture half the time, otherwise anything.
+      if (rnd() < 0.5) {
+        const sc = rootScores(fen, 1, { plain: true });
+        if (sc[0].score > evaluate(g, true) + 150) return sc[0].move;
+      }
+      return toMove(legal[Math.floor(rnd() * legal.length)]);
+    }
+    if (level === 2 || level === 3) {
+      const sc = rootScores(fen, level - 1);
+      const noise = level === 2 ? 160 : 45;
+      let best = null, bv = -INF;
+      for (const s of sc) {
+        const v = s.score >= MATE - 100 ? s.score : s.score + (rnd() * 2 - 1) * noise;
+        if (v > bv) { bv = v; best = s.move; }
+      }
+      return best;
+    }
+    return bestMove(fen, 3).move;
+  }
+
+  // ---- Coach: does this move give something away? ----
+  function sanOf(fen, mv) { const g = game(fen); try { return g.move(mv).san; } catch (e) { return null; } }
+
+  // The opponent's best capture sequence after `fen`, material only. Returns the value from the
+  // side to move and the first capture of that line.
+  function bestCaptureLine(fen) {
+    const g = game(fen);
+    const S = makeSearcher({ plain: true });
+    const stand = evaluate(g, true);
+    let best = stand, first = null;
+    for (const m of ordered(g, true)) {
+      g._makeMove(m);
+      const v = -S.qs(g, -INF, INF, 6);
+      g._undoMove();
+      if (v > best) { best = v; first = m; }
+    }
+    return { value: best, gain: best - stand, first: first && { move: toMove(first), captured: first.captured, sq: alg(first.to) } };
+  }
+
+  function mateInOne(fen) {
+    const g = game(fen);
+    for (const m of g.moves({ verbose: true })) {
+      g.move(m);
+      const mate = g.isCheckmate();
+      g.undo();
+      if (mate) return m;
+    }
+    return null;
+  }
+
+  /* checkMove(fenBefore, move): warnings a beginner should see before committing.
+     { kind: 'mate', reply } — the move lets the opponent mate at once.
+     { kind: 'loses', reply, lost } — the opponent can win at least ~2 points of material. */
+  function checkMove(fenBefore, mv) {
+    const g = game(fenBefore);
+    const me = g.turn();
+    const m0 = evaluate(g, true); // my material lead before the move
+    let res;
+    try { res = g.move(mv); } catch (e) { return null; }
+    if (g.isGameOver()) return null;
+    const after = g.fen();
+    const mate = mateInOne(after);
+    if (mate) return { kind: 'mate', reply: mate.san, from: mate.from, to: mate.to, mover: res };
+    const line = bestCaptureLine(after); // value is from the opponent's side
+    const mine = -line.value;
+    if (mine <= m0 - 180 && line.first) {
+      const replySan = sanOf(after, line.first.move);
+      return { kind: 'loses', reply: replySan, from: line.first.move.from, to: line.first.move.to,
+        lost: NAME[line.first.captured] || 'material', points: Math.round((m0 - mine) / 100), mover: res, me };
+    }
+    return null;
+  }
+
+  // Hint: best move at depth 3, with a short reason.
+  function hint(fen) {
+    const b = bestMove(fen, 3);
+    if (!b) return null;
+    const g = game(fen);
+    const r = g.move(b.move);
+    let why = '';
+    if (g.isCheckmate()) why = 'It is checkmate.';
+    else if (b.score > MATE - 100) why = 'It leads to a forced checkmate.';
+    else if (r.captured) why = 'It wins the ' + NAME[r.captured] + ' on ' + r.to + '.';
+    else if (g.inCheck()) why = 'It gives check and keeps the pressure on.';
+    else why = 'The computer likes this move best, looking three moves ahead.';
+    return { san: r.san, from: r.from, to: r.to, why };
+  }
+
+  // Search for forced mates: list root moves that mate within n of our moves.
+  function mateMoves(fen, n) {
+    const g = game(fen);
+    function forced(k) { // side to move is the defender; true if every reply loses to mate in k
+      const ms = g._moves({ legal: true });
+      if (!ms.length) return g._isKingAttacked(g._turn);
+      if (k === 0) return false;
+      for (const m of ms) { g._makeMove(m); const ok = attack(k); g._undoMove(); if (!ok) return false; }
+      return true;
+    }
+    function attack(k) { // side to move is the attacker; can mate within k moves
+      for (const m of g._moves({ legal: true })) {
+        g._makeMove(m); const ok = forced(k - 1); g._undoMove(); if (ok) return true;
+      }
+      return false;
+    }
+    const out = [];
+    for (const m of g._moves({ legal: true })) {
+      g._makeMove(m); const ok = forced(n - 1); g._undoMove();
+      if (ok) out.push(toMove(m));
+    }
+    return out;
+  }
+
+  return { VAL, NAME, MATE, LEVELS, evaluate: (fen) => evaluate(game(fen)), rootScores, bestMove,
+    pickMove, checkMove, hint, mateMoves, mateInOne, bestCaptureLine, sanOf };
+}
+if (typeof module !== 'undefined') module.exports = { makeEngine };
+</script>
+<script>
+/* Content: lessons, puzzles and openings. Every position and move here is checked by
+   test/check-content.mjs (legal FENs, legal moves, solutions that really work). Run it after
+   editing anything below. */
+const CONTENT = (() => {
+  /* Lesson step kinds:
+     read   — text only, the board shows a position.
+     move   — make one of `accept` (SAN). `wrong` maps SAN → explanation for tempting mistakes.
+     mate   — give checkmate in one (any mating move counts).
+     safe   — make any move the coach finds safe (no piece left hanging, no mate allowed).
+     drill  — play on against the computer until `goal` ('mate' or 'promote') within `limit` moves. */
+  const LESSONS = [
+    {
+      id: 'think', title: 'Before every move: checks, captures, threats', group: 'Habits',
+      steps: [
+        { kind: 'read', fen: 'start', text: `Most beginner games are not lost to clever plans. They are lost because someone left a piece where it could be taken for free, or missed a piece they could take for free.
+
+Before every move, ask three questions:
+1. **What did my opponent's last move threaten?** Is any of my pieces attacked now?
+2. **Can I give check, or capture something?** Look at every capture, even ones that look silly.
+3. **After my move, what can they take?** Look at the square your piece lands on, and at the piece it stops guarding.
+
+This app's coach asks question 3 for you when you play. The goal is to make it a habit so you don't need the coach.` },
+        { kind: 'safe', fen: 'rnb1k1nr/pppp1ppp/8/2b1p3/2B1P2q/2N5/PPPP1PPP/R1BQK1NR w KQkq - 4 4', text: `Black's last move was **Qh4**. Ask question 1: what does it threaten?
+
+The queen and the bishop on c5 both aim at **f2**. Only your king guards f2. If you ignore it, **Qxf2** is checkmate.
+
+Make a move that stops it. There is more than one good answer.`,
+          done: 'Good. You saw the threat and dealt with it. **g3** chases the queen away, **Qe2**, **Qf3** and **Nh3** guard f2, and **d4** blocks the bishop. Careful: **Nf3** looks natural but doesn\'t guard f2, so ...Qxf2 is still mate.',
+          wrong: { 'Ke2': 'That dodges the mate, but now your king stands in the middle and can never castle. Look for a move that guards f2, blocks the bishop, or chases the queen.', 'Kf1': 'That dodges the mate, but your king loses the right to castle. Look for a move that guards f2, blocks the bishop, or chases the queen.' } },
+      ],
+    },
+    {
+      id: 'values', title: 'What the pieces are worth', group: 'Habits',
+      steps: [
+        { kind: 'read', fen: 'start', icons: 'values', text: `Players count pieces in points so they can tell whether a trade is good:
+
+- **Pawn: 1**
+- **Knight: 3**, **Bishop: 3**
+- **Rook: 5**
+- **Queen: 9**
+- **King:** priceless. You can't trade it; losing it loses the game.
+
+Giving a knight (3) for a rook (5) wins you 2 points. Giving a rook (5) for a pawn (1) loses you 4. A 3-point lead is usually enough to win if you keep trading pieces.` },
+        { kind: 'move', fen: '4k3/8/2n5/8/2R1p3/8/8/4K3 w - - 0 1', accept: ['Rxc6'], text: `Your rook on c4 can take the pawn on e4 or the knight on c6. Neither is guarded.
+
+Which capture is worth more? Take it.`,
+          wrong: { 'Rxe4+': 'That takes a pawn (1 point) and gives check, but the knight on c6 is worth 3 and is also free. Count first, then take.' },
+          done: 'Yes. A free knight is worth three free pawns.' },
+        { kind: 'move', fen: '4k3/2p5/3p4/8/3R3b/8/8/1K6 w - - 0 1', accept: ['Rxh4'], text: `Two black pieces are in your rook's reach: the pawn on d6 and the bishop on h4.
+
+Before you capture, check what guards each one. Look at the pawn on c7.`,
+          wrong: { 'Rxd6': 'The pawn on c7 guards d6, so ...cxd6 takes your rook. You would give 5 points for 1. Always ask "what guards it?" before you capture.' },
+          done: 'Right. The pawn on d6 is guarded by c7. The bishop on h4 has no guard, so it is free.' },
+      ],
+    },
+    {
+      id: 'mate', title: 'Check, checkmate and stalemate', group: 'Basics',
+      steps: [
+        { kind: 'read', fen: '7k/8/6K1/8/8/8/8/Q7 w - - 0 1', text: `**Check:** the king is attacked. The player must get out of it at once: move the king, capture the attacker, or put a piece in between.
+
+**Checkmate:** the king is in check and none of those work. The game is over.
+
+**Stalemate:** the player to move is *not* in check but has no legal move. The game is a **draw**, even if one side is far ahead. It is the classic way to throw away a won game.
+
+Here White has a queen and Black only has a king.` },
+        { kind: 'mate', fen: '7k/8/6K1/8/8/8/8/Q7 w - - 0 1', text: `Checkmate Black in one move.
+
+Your king on g6 already covers g7 and h7. Find the queen move that attacks h8 *and* covers g8.`,
+          stalemate: 'That is **stalemate**: Black is not in check, but the king has no square to go to. The game ends in a draw. Before you play a quiet move against a lone king, check that it still has a move.',
+          done: 'Checkmate. **Qa8** checks along the back rank while your king covers g7 and h7. **Qg7** works too, because your king guards the queen.' },
+        { kind: 'mate', fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', text: `This one comes up all the time. Black's king is stuck behind its own pawns.
+
+Checkmate in one.`,
+          done: 'This is the **back-rank mate**. Black castled and never gave the king a square to escape. Moving one of those pawns early (often h6) prevents it.' },
+      ],
+    },
+    {
+      id: 'opening', title: 'How to start a game', group: 'Basics',
+      steps: [
+        { kind: 'read', fen: 'start', text: `You don't need to memorize openings to play a good start. Follow these principles:
+
+1. **Take the center.** Put a pawn on e4 or d4 (e5 or d5 as Black). Pieces in the middle reach more squares.
+2. **Bring out knights and bishops.** Get them off the back rank, usually knights before bishops. Try not to move the same piece twice.
+3. **Castle early.** It tucks your king away and brings a rook toward the middle.
+4. **Don't bring the queen out early.** It gets chased around by pieces worth less, and you lose time.
+5. **Don't grab pawns while your pieces are still at home.**
+
+The Openings tab walks you through real openings move by move.` },
+        { kind: 'move', fen: 'start', accept: ['e4', 'd4', 'Nf3', 'c4'], text: 'Play a good first move for White.',
+          wrong: { 'a4': 'Legal, but it does nothing for the center. Try a center pawn or a knight.', 'h4': 'This doesn\'t help the center and weakens your king\'s side. Try e4 or d4.', 'a3': 'A wasted move. Use your first moves to take the center.', 'h3': 'A wasted move. Use your first moves to take the center.', 'Na3': 'Knights belong toward the middle. From a3 it reaches only a few squares. Try Nf3 or Nc3, or a center pawn.', 'Nh3': 'Knights on the edge are weak: "a knight on the rim is dim." Try Nf3.', 'f3': 'This weakens your king and blocks the knight\'s best square. Try e4 or d4.', 'g4': 'This weakens your king badly. Try e4 or d4.' },
+          done: 'A good start. It takes space in the center and opens lines for your pieces.' },
+        { kind: 'move', fen: 'r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4', accept: ['O-O'], other: 'That is a reasonable move, but this question is about your king. What is the safest thing to do with it?', text: `Both sides have taken the center and brought out pieces. Your knight and bishop have left the king's side.
+
+What is the safest thing to do with your king now?`,
+          wrong: { 'Ke2': 'Walking the king forward puts it in danger and blocks your pieces. You can castle: drag the king two squares toward the rook.', 'Kf1': 'This gives up castling and leaves the rook on h1 stuck. You can castle: drag the king two squares toward the rook.' },
+          done: 'Castled. The king is tucked behind pawns and the rook is heading toward the middle. To castle, move the king two squares toward the rook and the rook jumps over.' },
+      ],
+    },
+    {
+      id: 'forks', title: 'Forks: attack two things at once', group: 'Tactics',
+      steps: [
+        { kind: 'read', fen: 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1', text: `A **fork** is one piece attacking two enemy pieces at the same time. Your opponent can save only one.
+
+Knights are the best forkers because their jump is hard to see coming. The best fork includes the king: check means they *must* deal with the king, and you take the other piece.
+
+Pawns, queens and even kings can fork too.` },
+        { kind: 'move', fen: 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1', accept: ['Nc7+'], text: 'Find the knight move that attacks the king and the rook at the same time.',
+          done: 'Fork! The king has to move, and next you take the rook on a8.' },
+        { kind: 'move', fen: '4k3/8/8/2n1b3/8/3PP3/8/7K w - - 0 1', accept: ['d4'], text: 'Pawns fork too. Black\'s knight and bishop are side by side. Find the pawn move that attacks both.',
+          done: 'The pawn on d4 attacks both pieces, and the pawn on e3 guards it. Black loses a piece.' },
+      ],
+    },
+    {
+      id: 'pins', title: 'Pins and skewers', group: 'Tactics',
+      steps: [
+        { kind: 'read', fen: '4k3/4q3/8/8/8/8/5K2/R7 w - - 0 1', text: `A **pin** is an attack on a piece that can't move out of the way, because a more valuable piece (often the king) stands behind it on the same line.
+
+If the piece behind is the king, the pinned piece is not allowed to move at all.
+
+Only queens, rooks and bishops can pin, because they attack along lines.` },
+        { kind: 'move', fen: '4k3/4q3/8/8/8/8/5K2/R7 w - - 0 1', accept: ['Re1'], text: 'Black\'s queen and king are on the same file. Pin the queen to the king.',
+          done: 'Pinned. The queen can\'t leave the e-file without exposing the king. Black\'s best is ...Qxe1+ Kxe1, giving up the queen (9) for your rook (5).' },
+        { kind: 'read', fen: '8/8/8/8/q2k4/8/8/6KR w - - 0 1', text: `A **skewer** is a pin turned around. You attack the *valuable* piece first, it has to move, and you take the piece behind it.
+
+Here Black's king and queen are on the same rank.` },
+        { kind: 'move', fen: '8/8/8/8/q2k4/8/8/6KR w - - 0 1', accept: ['Rh4+'], text: 'Skewer the king and queen.',
+          done: 'The king has to step off the 4th rank, and then your rook takes the queen on a4.' },
+      ],
+    },
+    {
+      id: 'trade', title: 'When you\'re ahead, trade', group: 'Strategy',
+      steps: [
+        { kind: 'read', fen: '3qk3/8/8/8/8/8/8/R2QK3 w - - 0 1', text: `When you are ahead in material, **trade pieces**: swap a piece for an equal one. Each trade makes your lead count for more. A rook against nothing is an easy win, but a rook extra in a crowded middlegame still needs care.
+
+When you are *behind*, do the opposite: keep pieces on and look for chances.
+
+Here you have an extra rook.` },
+        { kind: 'move', fen: '3qk3/8/8/8/8/8/8/R2QK3 w - - 0 1', accept: ['Qxd8+'], text: 'Trade off the queens.',
+          done: 'Now it\'s king and rook against a lone king, a simple win. The next lesson shows how.' },
+      ],
+    },
+    {
+      id: 'kqk', title: 'Checkmate with king and queen', group: 'Endgames',
+      steps: [
+        { kind: 'read', fen: '8/8/8/4k3/8/8/8/3QK3 w - - 0 1', text: `Every game you win by a lot ends like this, so learn it until it's automatic.
+
+**The method:**
+1. Use the queen to **build a box** around the enemy king. Move the queen a knight's jump away from the king, and the king's space shrinks.
+2. Keep shrinking the box until the king is stuck on an edge.
+3. **Bring your own king** up. The queen can't mate alone.
+4. Mate with the queen next to the king, guarded by your king, or along the edge.
+
+**Watch out for stalemate.** When the king has only a few squares left, check that it still has one before you play a quiet move.` },
+        { kind: 'drill', fen: '8/8/8/4k3/8/8/8/3QK3 w - - 0 1', goal: 'mate', limit: 30, text: 'Checkmate the computer\'s king within 30 moves. Box it in, bring your king, then mate.',
+          done: 'Checkmate! Repeat this drill until you can do it without thinking.' },
+      ],
+    },
+    {
+      id: 'krk', title: 'Checkmate with king and rook', group: 'Endgames',
+      steps: [
+        { kind: 'read', fen: '8/8/8/4k3/8/8/8/R3K3 w - - 0 1', text: `A rook mates too, but it needs more help from your king.
+
+**The method:**
+1. Use the rook to cut the king off along a rank or file.
+2. Walk your king toward the enemy king.
+3. When the kings face each other with one square between them, check with the rook. This pushes the enemy king back one row.
+4. If the enemy king attacks your rook, move the rook far away along its line.
+5. Repeat until the king is on the edge, then mate along it.
+
+Use spare rook moves (one square along the cut-off line) to make the kings face each other at the right moment.` },
+        { kind: 'drill', fen: '8/8/8/4k3/8/8/8/R3K3 w - - 0 1', goal: 'mate', limit: 40, text: 'Checkmate the computer\'s king within 40 moves.',
+          done: 'Checkmate with a rook. You now know both basic mates.' },
+      ],
+    },
+  ];
+
+  /* Puzzles. `line` is the main line in SAN, alternating your move, their reply, your move.
+     For theme 'mate' any checkmating move is accepted on the last move. `also` lists other
+     first moves that work just as well (the check script finds these). */
+  const PUZZLES = [
+    // Mate in one
+    { id: 'm1', theme: 'mate', title: 'Back rank', fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', line: ['Rd8#'], hint: 'The king is trapped behind its own pawns.' },
+    { id: 'm2', theme: 'mate', title: 'Scholar\'s mate', fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4', line: ['Qxf7#'], hint: 'f7 is guarded only by the king, and your bishop backs up the queen.' },
+    { id: 'm3', theme: 'mate', title: 'Smothered', fen: '6rk/6pp/8/6N1/8/8/8/6K1 w - - 0 1', line: ['Nf7#'], hint: 'The king is surrounded by its own pieces. A knight check can\'t be blocked.' },
+    { id: 'm4', theme: 'mate', title: 'Rook roller', fen: 'k7/8/8/8/8/8/1R6/2R3K1 w - - 0 1', line: ['Ra1#'], hint: 'One rook already controls the b-file.' },
+    { id: 'm5', theme: 'mate', title: 'Black to move', fen: '6k1/5ppp/8/8/8/8/r4PPP/6K1 b - - 0 1', line: ['Ra1#'], hint: 'White\'s king has no escape square.' },
+    { id: 'm6', theme: 'mate', title: 'Rook and knight', fen: '7k/7p/5N2/8/8/8/8/6RK w - - 0 1', line: ['Rg8#'], hint: 'The knight guards g8.' },
+    { id: 'm7', theme: 'mate', title: 'Punish the weak king', fen: 'rnbqkbnr/ppppp2p/5p2/6p1/4P3/2N5/PPPP1PPP/R1BQKBNR w KQkq - 0 3', line: ['Qh5#'], hint: 'Black moved the pawns in front of the king. Look at the e8–h5 diagonal.' },
+    { id: 'm8', theme: 'mate', title: 'Fool\'s mate', fen: 'rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2', line: ['Qh4#'], hint: 'White opened the diagonal next to the king.' },
+    { id: 'm9', theme: 'mate', title: 'Rook on the edge', fen: '4k3/8/4K3/8/8/8/8/R7 w - - 0 1', line: ['Ra8#'], hint: 'Your king covers the escape squares on the 7th rank.' },
+    { id: 'm10', theme: 'mate', title: 'Queen\'s kiss', fen: 'k7/7Q/1K6/8/8/8/8/8 w - - 0 1', line: ['Qb7#'], hint: 'Put the queen right next to the king, where your king guards it.' },
+    // Win material
+    { id: 'w1', theme: 'free', title: 'Free piece', fen: 'rnbqkb1r/pppp1ppp/8/4p3/4n3/3P4/PPP2PPP/RNBQKBNR w KQkq - 0 4', line: ['dxe4'], hint: 'Is anything of Black\'s attacked and not guarded?' },
+    { id: 'w2', theme: 'fork', title: 'Royal fork', fen: '6k1/3q4/8/8/4N3/8/8/6K1 w - - 0 1', line: ['Nf6+', 'Kf7', 'Nxd7'], hint: 'Find a knight check that also hits the queen.' },
+    { id: 'w3', theme: 'fork', title: 'Knight on c7', fen: 'r3k2r/ppp2ppp/8/3N4/8/8/PPP2PPP/R3K2R w KQkq - 0 1', line: ['Nxc7+', 'Kd7', 'Nxa8'], hint: 'c7 is a favorite square for White\'s knight.' },
+    { id: 'w4', theme: 'fork', title: 'Queen fork', fen: 'r3k3/8/8/8/8/8/8/1Q2K3 w - - 0 1', line: ['Qe4+', 'Kf7', 'Qxa8'], hint: 'Find a queen check that also attacks the rook.' },
+    { id: 'w5', theme: 'fork', title: 'Pawn fork', fen: '4k3/8/8/2n1b3/8/3PP3/8/7K w - - 0 1', line: ['d4'], hint: 'The smallest piece can attack two big ones.' },
+    { id: 'w6', theme: 'pin', title: 'Pin the queen', fen: '4k3/4q3/8/8/8/8/5K2/R7 w - - 0 1', line: ['Re1'], hint: 'The queen and king are on the same file.' },
+    { id: 'w7', theme: 'skewer', title: 'Skewer', fen: '8/8/8/8/q2k4/8/8/6KR w - - 0 1', line: ['Rh4+'], hint: 'Check the king along the line it shares with the queen.' },
+    { id: 'w8', theme: 'free', title: 'Count the guards', fen: '4k3/2p5/3p4/8/3R3b/8/8/1K6 w - - 0 1', line: ['Rxh4'], hint: 'One capture is guarded, one isn\'t.' },
+    // Mate in two
+    { id: 't1', theme: 'mate2', title: 'Two rooks', fen: '6k1/8/8/8/8/8/R7/1R4K1 w - - 0 1', line: ['Ra7', 'Kf8', 'Rb8#'], also: ['Rb7'], hint: 'First take away the 7th rank. A quiet move is fine when the king can\'t escape.' },
+    { id: 't2', theme: 'mate2', title: 'Smothered, with a sacrifice', fen: '3r3k/6pp/7N/8/2Q5/8/8/6K1 w - - 0 1', line: ['Qg8+', 'Rxg8', 'Nf7#'], hint: 'Give up the queen so a black piece blocks its own king.' },
+  ];
+
+  /* Openings: `side` is the color you play. Each move is [SAN, why]. */
+  const OPENINGS = [
+    { id: 'italian', name: 'Italian Game', side: 'w', blurb: 'The classic first opening: quick development and an early castle.',
+      moves: [
+        ['e4', 'Take the center with a pawn and open lines for your queen and bishop.'],
+        ['e5', 'Black claims the center too.'],
+        ['Nf3', 'Develop a knight toward the center. It also attacks the pawn on e5.'],
+        ['Nc6', 'Black guards e5 and develops a knight.'],
+        ['Bc4', 'The bishop aims at f7, the weakest square near Black\'s king (only the king guards it).'],
+        ['Bc5', 'Black mirrors you: the bishop aims at your f2.'],
+        ['c3', 'Prepares d4 to build a big center. It also gives your queen a path to b3.'],
+        ['Nf6', 'Black develops and attacks your e4 pawn.'],
+        ['d3', 'Guards e4 calmly. A solid, simple setup.'],
+        ['d6', 'Black guards e5 and opens a path for the light-squared bishop.'],
+        ['O-O', 'Castle. Your king is safe and you\'re ready for the middlegame.'],
+        ['O-O', 'Black castles too. Both sides followed every opening principle.'],
+      ] },
+    { id: 'qgd', name: 'Queen\'s Gambit', side: 'w', blurb: 'Start with d4 and offer a pawn to pull Black\'s pawn out of the center.',
+      moves: [
+        ['d4', 'Take the center. The queen guards d4 already, so this pawn is solid.'],
+        ['d5', 'Black matches you in the center.'],
+        ['c4', 'The "gambit": you offer the c-pawn. If Black takes, you win it back easily and get the center.'],
+        ['e6', 'Black declines and supports d5 with another pawn. This is the Queen\'s Gambit Declined.'],
+        ['Nc3', 'Develop and add pressure on d5.'],
+        ['Nf6', 'Black develops and guards d5 again.'],
+        ['Bg5', 'Pin the knight to the queen. The knight is now nervous about moving, which weakens Black\'s hold on d5.'],
+        ['Be7', 'Black breaks the pin by putting the bishop in between.'],
+        ['e3', 'Opens a path for your light-squared bishop and supports d4.'],
+        ['O-O', 'Black castles.'],
+        ['Nf3', 'Develop the last knight. Next come Bd3 and castling.'],
+      ] },
+    { id: 'london', name: 'London System', side: 'w', blurb: 'A set-up you can play against almost anything. Very little to memorize.',
+      moves: [
+        ['d4', 'Take the center.'],
+        ['d5', 'Black takes the center too.'],
+        ['Bf4', 'The London\'s key move: get this bishop out *before* e3, or it gets locked in behind the pawn.'],
+        ['Nf6', 'Black develops.'],
+        ['e3', 'Now e3 is fine because the bishop is already out. It supports d4 and opens a path for the other bishop.'],
+        ['e6', 'Black opens a path for the dark-squared bishop.'],
+        ['Nf3', 'Develop a knight toward the center.'],
+        ['c5', 'Black attacks your center from the side.'],
+        ['c3', 'Support d4 with another pawn. Your pawns on c3, d4 and e3 form a solid triangle.'],
+        ['Nc6', 'Black adds more pressure on d4.'],
+        ['Nbd2', 'Develop the other knight. On d2 it doesn\'t block the c-pawn.'],
+        ['Bd6', 'Black offers to trade bishops.'],
+        ['Bg3', 'Keep your good bishop by stepping back. If Black trades on g3, your h-pawn takes back.'],
+        ['O-O', 'Black castles.'],
+        ['Bd3', 'Your last minor piece comes out. You\'ll castle next. Same plan almost every game.'],
+      ] },
+    { id: 'e5', name: 'Meeting 1.e4 with 1...e5', side: 'b', blurb: 'As Black: match White in the center and develop toward the king\'s side.',
+      moves: [
+        ['e4', 'White takes the center.'],
+        ['e5', 'Answer in kind. Your pawn blocks White\'s and opens your queen and bishop.'],
+        ['Nf3', 'White attacks your e5 pawn.'],
+        ['Nc6', 'Guard e5 with a developing move. Moving a piece out beats pushing ...d6 or ...f6 here.'],
+        ['Bc4', 'White aims at f7.'],
+        ['Nf6', 'The Two Knights Defense: develop and counterattack the e4 pawn.'],
+        ['d3', 'White guards e4.'],
+        ['Be7', 'A calm, safe square for the bishop. You\'re ready to castle.'],
+        ['O-O', 'White castles.'],
+        ['O-O', 'You castle too. A sound, equal position.'],
+      ] },
+    { id: 'qgd-b', name: 'Meeting 1.d4 with 1...d5', side: 'b', blurb: 'As Black: a solid wall of pawns, then develop and castle.',
+      moves: [
+        ['d4', 'White takes the center.'],
+        ['d5', 'Stop White from taking the whole center. Your queen guards this pawn.'],
+        ['c4', 'The Queen\'s Gambit: White offers a pawn.'],
+        ['e6', 'Decline the gambit and support d5. Solid and easy to play.'],
+        ['Nc3', 'White adds pressure on d5.'],
+        ['Nf6', 'Develop and guard d5 again.'],
+        ['Nf3', 'White develops.'],
+        ['Be7', 'Get the bishop out so you can castle.'],
+        ['Bg5', 'White attacks your knight on f6, the piece that guards d5. Your bishop on e7 backs the knight up, so there is nothing to fear.'],
+        ['O-O', 'Castle. Your king is safe and your position is solid.'],
+      ] },
+    { id: 'scholar', name: 'Stopping the Scholar\'s Mate', side: 'b', blurb: 'Beginners love the four-move checkmate. Here is how to stop it and come out ahead.',
+      moves: [
+        ['e4', 'White takes the center.'],
+        ['e5', 'You do too.'],
+        ['Qh5', 'An early queen. It attacks e5, and it is aiming at f7.'],
+        ['Nc6', 'Guard e5 with a developing move.'],
+        ['Bc4', 'Now the threat is Qxf7#. The queen and bishop both hit f7.'],
+        ['g6', 'Block the queen\'s path to f7 and attack the queen at the same time. Don\'t play ...Nf6?? here: Qxf7 is mate.'],
+        ['Qf3', 'The queen retreats but still aims at f7 again!'],
+        ['Nf6', 'Block the f-file with a knight. f7 is safe, and you developed a piece. White\'s queen has moved three times and you are ahead in development.'],
+      ] },
+  ];
+
+  return { LESSONS, PUZZLES: PUZZLES.filter((p) => !p.skip), OPENINGS };
+})();
+if (typeof module !== 'undefined') module.exports = { CONTENT };
+</script>
+<script>
+/* Browser client: board, and the Learn / Puzzles / Openings / Play screens. */
+function startApp(Chess) {
+  const E = makeEngine(Chess);
+  const { LESSONS, PUZZLES, OPENINGS } = CONTENT;
+  const START = new Chess().fen();
+  const fenOf = (f) => (f === 'start' ? START : f);
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } },
+  };
+  const progress = Object.assign({ lessons: {}, puzzles: {}, openings: {} }, store.get('cc.progress', {}));
+  const saveProgress = () => store.set('cc.progress', progress);
+  const SIDE = { w: 'White', b: 'Black' };
+  const NAME = E.NAME;
+  const pieceImg = (code) => `<img src="${PIECES[code]}" alt="" draggable="false">`;
+
+  // Tiny markdown: paragraphs, - and 1. lists, **bold**, *italic*.
+  function md(text) {
+    const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>');
+    return text.trim().split(/\n\s*\n/).map((block) => {
+      const lines = block.split('\n');
+      if (lines.every((l) => /^\s*- /.test(l))) return '<ul>' + lines.map((l) => '<li>' + inline(l.replace(/^\s*- /, '')) + '</li>').join('') + '</ul>';
+      if (lines.every((l) => /^\s*\d+\. /.test(l))) return '<ol>' + lines.map((l) => '<li>' + inline(l.replace(/^\s*\d+\. /, '')) + '</li>').join('') + '</ol>';
+      if (/^\s*\d+\. /.test(lines[1] || '') && !/^\s*\d+\. /.test(lines[0])) {
+        return '<p>' + inline(lines[0]) + '</p><ol>' + lines.slice(1).map((l) => '<li>' + inline(l.replace(/^\s*\d+\. /, '')) + '</li>').join('') + '</ol>';
+      }
+      return '<p>' + lines.map(inline).join('<br>') + '</p>';
+    }).join('');
+  }
+  const stripSan = (s) => s.replace(/[+#?!]/g, '');
+  function tryMove(fen, mv) { const g = new Chess(fen); try { const r = g.move(mv); return { g, r }; } catch (e) { return null; } }
+
+  // ---------------------------------------------------------------- Board
+  const board = {
+    el: $('#board'), fen: START, orientation: 'w', interactive: null, last: null, marks: {}, sel: null, drag: null, busy: false,
+    onMove: null,
+    set(o) { Object.assign(this, o); this.sel = null; this.render(); },
+    targets() {
+      if (!this.sel) return [];
+      return new Chess(this.fen).moves({ square: this.sel, verbose: true });
+    },
+    render() {
+      const g = new Chess(this.fen);
+      const files = 'abcdefgh'.split(''), ranks = [8, 7, 6, 5, 4, 3, 2, 1];
+      if (this.orientation === 'b') { files.reverse(); ranks.reverse(); }
+      const targets = {};
+      for (const m of this.targets()) targets[m.to] = m.captured ? 'cap' : 'dot';
+      let checkSq = null;
+      if (g.inCheck()) for (const row of g.board()) for (const p of row) if (p && p.type === 'k' && p.color === g.turn()) checkSq = p.square;
+      let h = '';
+      ranks.forEach((r, ri) => files.forEach((f, fi) => {
+        const sq = f + r;
+        const dark = ('abcdefgh'.indexOf(f) + r) % 2 === 1;
+        const p = g.get(sq);
+        const cls = ['sq', dark ? 'dark' : 'light'];
+        if (this.last && (this.last.from === sq || this.last.to === sq)) cls.push('last');
+        if (this.sel === sq) cls.push('sel');
+        if (checkSq === sq) cls.push('check');
+        if (this.marks[sq]) cls.push('mark-' + this.marks[sq]);
+        if (this.drag && this.drag.moved && this.drag.sq === sq) cls.push('lifted');
+        h += `<div class="${cls.join(' ')}" data-sq="${sq}">`;
+        if (fi === 0) h += `<span class="coord rank">${r}</span>`;
+        if (ri === 7) h += `<span class="coord file">${f}</span>`;
+        if (p) h += pieceImg(p.color + p.type.toUpperCase());
+        if (targets[sq]) h += `<span class="t-${targets[sq]}"></span>`;
+        h += '</div>';
+      }));
+      this.el.innerHTML = h;
+      this.el.classList.toggle('live', !!this.interactive && g.turn() === this.interactive && !this.busy);
+    },
+    sqAt(x, y) { const el = document.elementFromPoint(x, y); const s = el && el.closest('#board [data-sq]'); return s ? s.dataset.sq : null; },
+    async attempt(from, to) {
+      const ms = new Chess(this.fen).moves({ square: from, verbose: true }).filter((m) => m.to === to);
+      if (!ms.length) return false;
+      let promotion;
+      if (ms[0].promotion) { promotion = await this.choosePromotion(ms[0].color); if (!promotion) { this.render(); return true; } }
+      this.sel = null;
+      if (this.onMove) this.onMove({ from, to, promotion });
+      return true;
+    },
+    choosePromotion(color) {
+      return new Promise((resolve) => {
+        const box = $('#promo');
+        box.innerHTML = '<div class="promo-card"><p>Promote to</p><div>' + ['q', 'r', 'b', 'n'].map((t) =>
+          `<button data-p="${t}" aria-label="${NAME[t]}">${pieceImg(color + t.toUpperCase())}</button>`).join('') + '</div></div>';
+        box.hidden = false;
+        box.onclick = (e) => { const b = e.target.closest('button'); box.hidden = true; box.onclick = null; resolve(b ? b.dataset.p : null); };
+      });
+    },
+    canTouch(sq) {
+      if (!this.interactive || this.busy) return false;
+      const g = new Chess(this.fen);
+      const p = g.get(sq);
+      return p && p.color === this.interactive && g.turn() === this.interactive;
+    },
+  };
+  board.el.addEventListener('pointerdown', async (e) => {
+    const s = e.target.closest('[data-sq]'); if (!s) return;
+    const sq = s.dataset.sq;
+    if (board.sel && board.sel !== sq && board.targets().some((m) => m.to === sq)) { e.preventDefault(); await board.attempt(board.sel, sq); return; }
+    if (board.canTouch(sq)) {
+      e.preventDefault();
+      board.sel = sq;
+      board.drag = { sq, x: e.clientX, y: e.clientY, moved: false, ghost: null, id: e.pointerId };
+      board.render();
+    } else if (board.sel) { board.sel = null; board.render(); }
+  });
+  window.addEventListener('pointermove', (e) => {
+    const d = board.drag; if (!d || e.pointerId !== d.id) return;
+    if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) return;
+    if (!d.moved) {
+      d.moved = true;
+      const size = board.el.getBoundingClientRect().width / 8;
+      const p = new Chess(board.fen).get(d.sq);
+      d.ghost = document.createElement('div');
+      d.ghost.className = 'ghost';
+      d.ghost.style.width = d.ghost.style.height = size + 'px';
+      d.ghost.innerHTML = pieceImg(p.color + p.type.toUpperCase());
+      document.body.appendChild(d.ghost);
+      board.render();
+    }
+    d.ghost.style.transform = `translate(${e.clientX - d.ghost.offsetWidth / 2}px, ${e.clientY - d.ghost.offsetHeight / 2}px)`;
+  });
+  window.addEventListener('pointerup', async (e) => {
+    const d = board.drag; if (!d || e.pointerId !== d.id) return;
+    board.drag = null;
+    if (d.ghost) d.ghost.remove();
+    if (d.moved) {
+      const to = board.sqAt(e.clientX, e.clientY);
+      if (to && to !== d.sq && await board.attempt(d.sq, to)) return;
+      board.render();
+    }
+  });
+  window.addEventListener('pointercancel', () => { if (board.drag) { if (board.drag.ghost) board.drag.ghost.remove(); board.drag = null; board.render(); } });
+
+    // Delayed steps are dropped if the screen changed in the meantime.
+  let epoch = 0;
+  const bump = () => { epoch++; };
+  const later = (fn, ms) => { const e = epoch; setTimeout(() => { if (e === epoch) fn(); }, ms); };
+  const panel = $('#panel');
+  const main = $('#main');
+  function layout(withBoard) { main.classList.toggle('with-board', withBoard); }
+
+  function feedback(kind, html) { return `<div class="fb fb-${kind}">${html}</div>`; }
+
+  // Explain why a move isn't what we wanted, using the coach.
+  function explainBad(fen, mv) {
+    const w = E.checkMove(fen, mv);
+    if (!w) return null;
+    if (w.kind === 'mate') return `After that, ${SIDE[new Chess(fen).turn() === 'w' ? 'b' : 'w']} plays <b>${esc(w.reply)}</b>, and that's checkmate.`;
+    return `After that, ${SIDE[new Chess(fen).turn() === 'w' ? 'b' : 'w']} plays <b>${esc(w.reply)}</b> and wins your ${w.lost}.`;
+  }
+
+  // ---------------------------------------------------------------- Learn
+  const Learn = {
+    lesson: null, step: 0, solved: false, msg: '', drill: null,
+    enter() { if (this.lesson) this.showStep(); else this.list(); },
+    list() {
+      bump(); layout(false);
+      this.lesson = null;
+      const groups = [...new Set(LESSONS.map((l) => l.group))];
+      panel.innerHTML = `<div class="intro"><h2>Learn</h2><p>Short lessons, each with a position to try. Take them in order, starting with the habits that win the most games.</p></div>` +
+        groups.map((gname) => `<h3 class="group">${esc(gname)}</h3><div class="cards">` + LESSONS.filter((l) => l.group === gname).map((l) =>
+          `<button class="card" data-lesson="${l.id}"><span class="card-title">${esc(l.title)}</span><span class="card-meta">${l.steps.length} steps${progress.lessons[l.id] ? '<span class="tick">✓ done</span>' : ''}</span></button>`).join('') + '</div>').join('');
+      panel.onclick = (e) => { const b = e.target.closest('[data-lesson]'); if (b) this.open(b.dataset.lesson); };
+    },
+    open(id) { this.lesson = LESSONS.find((l) => l.id === id); this.step = 0; this.showStep(); },
+    get cur() { return this.lesson.steps[this.step]; },
+    showStep() {
+      bump(); layout(true);
+      const st = this.cur;
+      this.solved = st.kind === 'read';
+      this.msg = '';
+      this.drill = null;
+      const fen = fenOf(st.fen);
+      const turn = new Chess(fen).turn();
+      board.onMove = (mv) => this.onMove(mv);
+      if (st.kind === 'drill') this.drill = { g: new Chess(fen), moves: 0, over: false };
+      board.set({ fen, last: null, marks: {}, orientation: st.kind === 'read' ? 'w' : turn, interactive: st.kind === 'read' ? null : turn, busy: false });
+      this.render();
+    },
+    render() {
+      const L = this.lesson, st = this.cur;
+      const last = this.step === L.steps.length - 1;
+      const turn = new Chess(fenOf(st.fen)).turn();
+      let task = '';
+      if (st.kind !== 'read') task = `<p class="task">${SIDE[turn]} to move.</p>`;
+      let icons = '';
+      if (st.icons === 'values') icons = '<div class="values">' + [['P', 1], ['N', 3], ['B', 3], ['R', 5], ['Q', 9]].map(([p, v]) => `<div>${pieceImg('w' + p)}<b>${v}</b></div>`).join('') + '</div>';
+      let drill = '';
+      if (this.drill) drill = `<p class="counter">Moves used: <b>${this.drill.moves}</b> of ${st.limit}</p>`;
+      const showBtn = (st.kind === 'move' || st.kind === 'mate') && !this.solved ? '<button data-act="show" class="ghost-btn">Show me</button>' : '';
+      const retry = (st.kind === 'drill' && (this.drill.moves || this.drill.over)) ? '<button data-act="retry" class="ghost-btn">Start over</button>' : '';
+      panel.innerHTML = `<div class="crumbs"><button data-act="list" class="link">← All lessons</button><span>${esc(L.group)} · step ${this.step + 1} of ${L.steps.length}</span></div>
+        <h2>${esc(L.title)}</h2>${icons}<div class="prose">${md(st.text)}</div>${task}${drill}
+        ${this.msg}
+        <div class="row">${this.step > 0 ? '<button data-act="prev" class="ghost-btn">Back</button>' : ''}${showBtn}${retry}
+          <span class="grow"></span>
+          ${this.solved ? `<button data-act="next" class="primary">${last ? 'Finish lesson' : 'Next'}</button>` : `<button data-act="next" class="ghost-btn">Skip</button>`}</div>`;
+      panel.onclick = (e) => {
+        const a = e.target.closest('[data-act]'); if (!a) return;
+        const act = a.dataset.act;
+        if (act === 'list') this.list();
+        if (act === 'prev') { this.step--; this.showStep(); }
+        if (act === 'retry') this.showStep();
+        if (act === 'show') this.showMe();
+        if (act === 'next') {
+          if (last) { if (this.solved) { progress.lessons[L.id] = true; saveProgress(); } this.list(); }
+          else { this.step++; this.showStep(); }
+        }
+      };
+    },
+    showMe() {
+      const st = this.cur, fen = fenOf(st.fen);
+      let san = st.accept ? st.accept[0] : null;
+      if (st.kind === 'mate') { const m = E.mateInOne(fen); san = m && m.san; }
+      const t = san && tryMove(fen, san);
+      if (!t) return;
+      board.set({ marks: { [t.r.from]: 'hint', [t.r.to]: 'hint' } });
+      this.msg = feedback('hint', `Try <b>${esc(t.r.san)}</b>: move the piece on ${t.r.from} to ${t.r.to}.`);
+      this.render();
+    },
+    succeed(fen, r, html) {
+      this.solved = true;
+      board.set({ fen, last: r, interactive: null, marks: {} });
+      this.msg = feedback('good', html);
+      this.render();
+    },
+    bounce(fenBefore, t, html) {
+      // Show the wrong move for a moment, then put the position back.
+      board.set({ fen: t.g.fen(), last: t.r, busy: true });
+      this.msg = feedback('bad', html);
+      this.render();
+      later(() => { board.set({ fen: fenBefore, last: null, busy: false }); }, 1100);
+    },
+    onMove(mv) {
+      const st = this.cur;
+      if (this.solved && st.kind !== 'drill') return;
+      if (st.kind === 'drill') return this.drillMove(mv);
+      const fen = fenOf(st.fen);
+      const t = tryMove(fen, mv); if (!t) return;
+      const san = t.r.san;
+      if (st.kind === 'move') {
+        if (st.accept.some((a) => stripSan(a) === stripSan(san))) return this.succeed(t.g.fen(), t.r, md(st.done));
+        const w = st.wrong && Object.keys(st.wrong).find((k) => stripSan(k) === stripSan(san));
+        if (w) return this.bounce(fen, t, md(st.wrong[w]));
+        const why = explainBad(fen, mv);
+        return this.bounce(fen, t, (why ? why + ' ' : '') + (st.other ? md(st.other) : 'Not quite. Have another look.'));
+      }
+      if (st.kind === 'mate') {
+        if (t.g.isCheckmate()) return this.succeed(t.g.fen(), t.r, md(st.done));
+        if (t.g.isStalemate()) return this.bounce(fen, t, md(st.stalemate || 'That is **stalemate**: a draw.'));
+        return this.bounce(fen, t, t.g.inCheck() ? `<b>${esc(san)}</b> is check, but not mate: the king can still get out of it. Look for a check that leaves no escape.` : `<b>${esc(san)}</b> isn't even check. Checkmate starts with a check.`);
+      }
+      if (st.kind === 'safe') {
+        const w = st.wrong && Object.keys(st.wrong).find((k) => stripSan(k) === stripSan(san));
+        if (w) return this.bounce(fen, t, md(st.wrong[w]));
+        const why = explainBad(fen, mv);
+        if (!why) return this.succeed(t.g.fen(), t.r, md(st.done));
+        return this.bounce(fen, t, why + ' Try again.');
+      }
+    },
+    drillMove(mv) {
+      const d = this.drill, st = this.cur;
+      if (d.over) return;
+      const before = d.g.fen();
+      const bad = explainBad(before, mv);
+      if (bad) { const t = tryMove(before, mv); if (t) return this.bounce(before, t, bad + ' That doesn\'t count as a move. Try again.'); }
+      try { d.g.move(mv); } catch (e) { return; }
+      d.moves++;
+      const me = new Chess(fenOf(st.fen)).turn();
+      const finish = (ok, html) => { d.over = true; this.solved = ok; board.set({ fen: d.g.fen(), interactive: null }); this.msg = feedback(ok ? 'good' : 'bad', html); this.render(); };
+      const lastMv = d.g.history({ verbose: true }).slice(-1)[0];
+      board.set({ fen: d.g.fen(), last: lastMv, busy: true });
+      if (d.g.isCheckmate()) return finish(true, md(st.done));
+      if (d.g.isStalemate()) return finish(false, md('**Stalemate.** The king isn\'t in check but has no move, so the game is a draw. Leave it a square before you make a quiet move. Press *Start over*.'));
+      if (d.g.isDraw()) return finish(false, 'That position is a draw. Press <i>Start over</i> to try again.');
+      if (d.moves >= st.limit) return finish(false, `That's ${st.limit} moves. Press <i>Start over</i> and box the king in faster.`);
+      this.msg = '';
+      this.render();
+      later(() => {
+        const r = E.pickMove(d.g.fen(), 4);
+        const res = d.g.move(r);
+        board.set({ fen: d.g.fen(), last: res, busy: false, interactive: me });
+        if (d.g.isDraw()) return finish(false, res.captured ? `The king took your ${NAME[res.captured]}, and a lone king can't be mated. Keep your pieces guarded or out of reach. Press <i>Start over</i>.` : 'That position is a draw. Press <i>Start over</i>.');
+        this.render();
+      }, 350);
+    },
+  };
+
+  // ---------------------------------------------------------------- Puzzles
+  const THEMES = { mate: 'Mate in one', mate2: 'Mate in two', free: 'Free piece', fork: 'Fork', pin: 'Pin', skewer: 'Skewer' };
+  const GROUPS = [['Mate in one', ['mate']], ['Win material', ['free', 'fork', 'pin', 'skewer']], ['Mate in two', ['mate2']]];
+  const Puzzles = {
+    p: null, g: null, ply: 0, helped: false, msg: '', done: false, offLine: false,
+    enter() { if (this.p) this.render(); else this.list(); },
+    list() {
+      bump(); layout(false); this.p = null;
+      const solved = Object.keys(progress.puzzles).length;
+      panel.innerHTML = `<div class="intro"><h2>Puzzles</h2><p>Each puzzle has one strong move to find. Tactics like these decide most beginner games. ${solved} of ${PUZZLES.length} solved.</p></div>` +
+        GROUPS.map(([name, themes]) => `<h3 class="group">${name}</h3><div class="cards small">` + PUZZLES.filter((p) => themes.includes(p.theme)).map((p) => {
+          const s = progress.puzzles[p.id];
+          return `<button class="card" data-p="${p.id}"><span class="card-title">${esc(p.title)}</span><span class="card-meta">${THEMES[p.theme]}${s ? `<span class="tick">${s === 'clean' ? '✓ first try' : '✓ solved'}</span>` : ''}</span></button>`;
+        }).join('') + '</div>').join('');
+      panel.onclick = (e) => { const b = e.target.closest('[data-p]'); if (b) this.open(b.dataset.p); };
+    },
+    open(id) {
+      this.p = PUZZLES.find((p) => p.id === id);
+      bump();
+      this.g = new Chess(this.p.fen); this.ply = 0; this.helped = false; this.msg = ''; this.done = false; this.offLine = false;
+      layout(true);
+      board.onMove = (mv) => this.onMove(mv);
+      board.set({ fen: this.p.fen, last: null, marks: {}, orientation: this.g.turn(), interactive: this.g.turn(), busy: false });
+      this.render();
+    },
+    goal() {
+      const t = this.p.theme;
+      return t === 'mate' ? 'Checkmate in one move.' : t === 'mate2' ? 'Checkmate in two moves.' : 'Win material.';
+    },
+    render() {
+      const P = this.p, i = PUZZLES.indexOf(P), side = SIDE[new Chess(P.fen).turn()];
+      panel.innerHTML = `<div class="crumbs"><button data-act="list" class="link">← All puzzles</button><span>Puzzle ${i + 1} of ${PUZZLES.length}</span></div>
+        <h2>${esc(P.title)}</h2><p class="tag">${THEMES[P.theme]}</p>
+        <p class="task">${side} to move. ${this.goal()}</p>${this.msg}
+        <div class="row">${this.done ? '<button data-act="retry" class="ghost-btn">Try again</button>' : '<button data-act="hint" class="ghost-btn">Hint</button><button data-act="solve" class="ghost-btn">Show solution</button>'}
+        <span class="grow"></span>${i < PUZZLES.length - 1 ? `<button data-act="next" class="${this.done ? 'primary' : 'ghost-btn'}">Next puzzle</button>` : ''}</div>`;
+      panel.onclick = (e) => {
+        const a = e.target.closest('[data-act]'); if (!a) return;
+        const act = a.dataset.act;
+        if (act === 'list') this.list();
+        if (act === 'retry') this.open(P.id);
+        if (act === 'next') this.open(PUZZLES[i + 1].id);
+        if (act === 'hint') { this.helped = true; this.msg = feedback('hint', esc(P.hint)); this.render(); }
+        if (act === 'solve') this.solve();
+      };
+    },
+    expected() { return this.offLine ? null : this.p.line[this.ply]; },
+    solve() {
+      this.helped = true;
+      const fen = this.g.fen();
+      let san = this.expected();
+      if (!san || !tryMove(fen, san)) { const h = this.p.theme.startsWith('mate') ? E.mateMoves(fen, this.p.theme === 'mate2' ? 2 - this.ply / 2 : 1)[0] : E.bestMove(fen, 3).move; san = h && tryMove(fen, h).r.san; }
+      const t = tryMove(fen, san);
+      board.set({ marks: { [t.r.from]: 'hint', [t.r.to]: 'hint' } });
+      this.msg = feedback('hint', `The move is <b>${esc(t.r.san)}</b>. Play it on the board.`);
+      this.render();
+    },
+    accepts(t) {
+      const P = this.p, last = this.ply >= P.line.length - 1;
+      if (P.theme.startsWith('mate') && (last || this.offLine) && t.g.isCheckmate()) return true;
+      const ok = [this.expected(), ...(this.ply === 0 ? P.also || [] : [])].filter(Boolean).map(stripSan);
+      if (ok.includes(stripSan(t.r.san))) return true;
+      if (this.offLine && !P.theme.startsWith('mate')) { // after an unexpected reply: any move about as good as the best
+        const sc = E.rootScores(this.g.fen(), 3);
+        const mine = sc.find((s) => s.move.from === t.r.from && s.move.to === t.r.to);
+        return mine && mine.score >= sc[0].score - 60;
+      }
+      if (P.theme === 'mate2' && this.ply === 0) return E.mateMoves(this.g.fen(), 2).some((m) => m.from === t.r.from && m.to === t.r.to);
+      return false;
+    },
+    onMove(mv) {
+      if (this.done) return;
+      const fen = this.g.fen();
+      const t = tryMove(fen, mv); if (!t) return;
+      if (this.accepts(t)) {
+        if (stripSan(t.r.san) !== stripSan(this.expected() || '')) this.offLine = true;
+        this.g.move(mv); this.ply++;
+        const finished = this.g.isCheckmate() || (!this.offLine && this.ply >= this.p.line.length) || (this.offLine && !this.p.theme.startsWith('mate') && this.ply >= this.p.line.length);
+        if (finished) return this.finish(t.r);
+        board.set({ fen: this.g.fen(), last: t.r, marks: {}, busy: true });
+        this.msg = feedback('good', `<b>${esc(t.r.san)}</b>. Good! Keep going.`);
+        this.render();
+        later(() => this.reply(), 550);
+        return;
+      }
+      this.helped = true;
+      let why;
+      if (this.p.theme.startsWith('mate')) {
+        if (t.g.isStalemate()) why = 'That is stalemate, a draw. Look for a check.';
+        else if (t.g.inCheck()) why = `<b>${esc(t.r.san)}</b> is check, but the king can still escape or the checking piece can be taken.`;
+        else why = explainBad(fen, mv) || `<b>${esc(t.r.san)}</b> isn't check. Mating attacks almost always start with checks.`;
+      } else {
+        why = explainBad(fen, mv) || `<b>${esc(t.r.san)}</b> doesn't win anything. ${this.p.theme === 'fork' ? 'Look for a move that attacks two pieces at once.' : this.p.theme === 'free' ? 'Look for a piece that is attacked and not guarded.' : 'Look at pieces lined up on the same line.'}`;
+      }
+      board.set({ fen: t.g.fen(), last: t.r, busy: true });
+      this.msg = feedback('bad', why + ' Try again.');
+      this.render();
+      later(() => board.set({ fen: this.g.fen(), last: null, busy: false }), 1100);
+    },
+    reply() {
+      const fen = this.g.fen();
+      let san = !this.offLine && this.p.line[this.ply];
+      let r = san && tryMove(fen, san) ? this.g.move(san) : null;
+      if (!r) { this.offLine = true; r = this.g.move(E.bestMove(fen, 3).move); }
+      this.ply++;
+      board.set({ fen: this.g.fen(), last: r, busy: false });
+      this.msg = feedback('info', `${SIDE[r.color]} answers <b>${esc(r.san)}</b>. Your move.`);
+      this.render();
+    },
+    finish(r) {
+      this.done = true;
+      const prev = progress.puzzles[this.p.id];
+      progress.puzzles[this.p.id] = (prev === 'clean' || !this.helped) ? 'clean' : 'helped';
+      saveProgress();
+      board.set({ fen: this.g.fen(), last: r, interactive: null, busy: false, marks: {} });
+      const line = this.g.history().join(' ');
+      this.msg = feedback('good', `<b>Solved!</b> ${this.g.isCheckmate() ? 'Checkmate.' : 'You win material.'} ${this.helped ? '' : 'First try.'}<br><span class="muted">Line: ${esc(line)}</span>`);
+      this.render();
+    },
+  };
+
+  // ---------------------------------------------------------------- Openings
+  const PIECE_WORD = { N: 'a knight', B: 'a bishop', R: 'a rook', Q: 'your queen', K: 'your king', O: 'your king (castle)' };
+  const Openings = {
+    o: null, g: null, idx: 0, recall: false, wrong: 0, msg: '', done: false,
+    enter() { if (this.o) this.render(); else this.list(); },
+    list() {
+      bump(); layout(false); this.o = null;
+      panel.innerHTML = `<div class="intro"><h2>Openings</h2><p>Learn a few real openings move by move. The computer plays the other side. Every move comes with a reason, because knowing <i>why</i> lets you handle it when your opponent plays something else.</p></div>` +
+        ['w', 'b'].map((side) => `<h3 class="group">As ${SIDE[side]}</h3><div class="cards">` + OPENINGS.filter((o) => o.side === side).map((o) =>
+          `<button class="card" data-o="${o.id}"><span class="card-title">${esc(o.name)}</span><span class="card-blurb">${esc(o.blurb)}</span><span class="card-meta">${Math.ceil(o.moves.length / 2)} moves${progress.openings[o.id] ? `<span class="tick">✓ ${progress.openings[o.id]}×</span>` : ''}</span></button>`).join('') + '</div>').join('');
+      panel.onclick = (e) => { const b = e.target.closest('[data-o]'); if (b) this.open(b.dataset.o, false); };
+    },
+    open(id, recall) {
+      this.o = OPENINGS.find((o) => o.id === id);
+      bump();
+      this.g = new Chess(); this.idx = 0; this.recall = recall; this.wrong = 0; this.msg = ''; this.done = false;
+      layout(true);
+      board.onMove = (mv) => this.onMove(mv);
+      board.set({ fen: START, last: null, marks: {}, orientation: this.o.side, interactive: this.o.side, busy: false });
+      this.advance();
+    },
+    mine() { return this.g.turn() === this.o.side; },
+    advance() {
+      if (this.idx >= this.o.moves.length) {
+        this.done = true;
+        progress.openings[this.o.id] = (progress.openings[this.o.id] || 0) + 1; saveProgress();
+        board.set({ interactive: null, marks: {} });
+        this.msg = feedback('good', `<b>Line complete.</b> ${this.recall ? 'You played it from memory.' : 'Now try it from memory, or play on from here against the computer.'}`);
+        return this.render();
+      }
+      if (!this.mine()) {
+        board.set({ busy: true });
+        this.render();
+        later(() => {
+          const r = this.g.move(this.o.moves[this.idx][0]); this.idx++;
+          board.set({ fen: this.g.fen(), last: r, busy: false, marks: {} });
+          this.advance();
+        }, 450);
+        return;
+      }
+      this.wrong = 0;
+      this.render();
+    },
+    render() {
+      const O = this.o;
+      const played = O.moves.slice(0, this.idx);
+      const notes = played.map(([san, why], i) => {
+        const num = Math.floor(i / 2) + 1, dots = i % 2 ? '…' : '.';
+        const mineMv = (i % 2 === 0) === (O.side === 'w');
+        return `<li class="${i === this.idx - 1 ? 'latest' : ''} ${mineMv ? 'mine' : ''}"><b>${num}${dots} ${esc(san)}</b> ${md(why).replace(/^<p>|<\/p>$/g, '')}</li>`;
+      }).join('');
+      let next = '';
+      if (!this.done && this.mine() && this.idx < O.moves.length) {
+        const [san, why] = O.moves[this.idx];
+        next = this.recall ? `<p class="task">Your move. Play the next move from memory.</p>` :
+          `<p class="task">Your move: play <b>${esc(san)}</b>.</p><p class="muted">${md(why).replace(/^<p>|<\/p>$/g, '')}</p>`;
+      } else if (!this.done) next = '<p class="task muted">Computer is moving…</p>';
+      const end = this.done ? `<button data-act="recall" class="primary">Practice from memory</button><button data-act="play" class="ghost-btn">Play on vs computer</button>` :
+        (this.recall && this.mine() ? '<button data-act="show" class="ghost-btn">Show me</button>' : '');
+      panel.innerHTML = `<div class="crumbs"><button data-act="list" class="link">← All openings</button><span>As ${SIDE[O.side]}${this.recall ? ' · from memory' : ''}</span></div>
+        <h2>${esc(O.name)}</h2>${next}${this.msg}
+        <div class="row">${end}<span class="grow"></span><button data-act="restart" class="ghost-btn">Restart</button></div>
+        <ol class="notes">${notes}</ol>`;
+      const latest = panel.querySelector('.notes .latest'); if (latest) latest.scrollIntoView({ block: 'nearest' });
+      panel.onclick = (e) => {
+        const a = e.target.closest('[data-act]'); if (!a) return;
+        const act = a.dataset.act;
+        if (act === 'list') this.list();
+        if (act === 'restart') this.open(O.id, this.recall);
+        if (act === 'recall') this.open(O.id, true);
+        if (act === 'show') this.hintMove(true);
+        if (act === 'play') { setTab('play'); Play.newGame({ fen: this.g.fen(), color: O.side, level: Play.s.level, coach: Play.s.coach }); }
+      };
+    },
+    hintMove(full) {
+      const t = tryMove(this.g.fen(), this.o.moves[this.idx][0]);
+      const word = PIECE_WORD[t.r.san[0]] || `your ${t.r.from[0]}-pawn`;
+      if (full) { board.set({ marks: { [t.r.from]: 'hint', [t.r.to]: 'hint' } }); this.msg = feedback('hint', `The move is <b>${esc(t.r.san)}</b>.`); }
+      else board.set({ marks: { [t.r.from]: 'hint' } });
+      return word;
+    },
+    onMove(mv) {
+      if (this.done || !this.mine()) return;
+      const [san] = this.o.moves[this.idx];
+      const t = tryMove(this.g.fen(), mv); if (!t) return;
+      if (stripSan(t.r.san) === stripSan(san)) {
+        const r = this.g.move(mv); this.idx++; this.msg = '';
+        board.set({ fen: this.g.fen(), last: r, marks: {} });
+        return this.advance();
+      }
+      this.wrong++;
+      const fen = this.g.fen();
+      board.set({ fen: t.g.fen(), last: t.r, busy: true });
+      const bad = explainBad(fen, mv);
+      const word = PIECE_WORD[san[0]] || `your ${tryMove(fen, san).r.from[0]}-pawn`;
+      const html = (bad ? bad + ' ' : `<b>${esc(t.r.san)}</b> is legal, but this line plays something else. `) + (this.wrong === 1 ? `Hint: move ${word}.` : 'The squares are marked.');
+      this.msg = feedback('bad', html);
+      this.render();
+      later(() => {
+        board.set({ fen, last: null, busy: false });
+        if (this.wrong >= 2) this.hintMove(true), this.render();
+      }, 1100);
+    },
+  };
+
+  // ---------------------------------------------------------------- Play
+  const Play = {
+    s: Object.assign({ level: 1, color: 'w', coach: true, start: START, moves: [] }, store.get('cc.play', {})),
+    stats: store.get('cc.stats', {}),
+    g: null, pending: null, thinking: false, hint: null, showNew: false, recorded: false,
+    init() {
+      this.g = new Chess(this.s.start);
+      try { for (const m of this.s.moves) this.g.move(m); } catch (e) { this.g = new Chess(this.s.start); this.s.moves = []; }
+      this.recorded = this.g.isGameOver();
+    },
+    save() { this.s.moves = this.g.history(); store.set('cc.play', this.s); },
+    enter() {
+      bump(); layout(true); this.thinking = false; this.pending = null;
+      board.onMove = (mv) => this.onMove(mv);
+      board.set({ fen: this.g.fen(), last: this.lastMove(), marks: {}, orientation: this.s.color, interactive: this.s.color, busy: false });
+      this.render();
+      this.maybeComputer();
+    },
+    lastMove() { return this.g.history({ verbose: true }).slice(-1)[0] || null; },
+    newGame(o) {
+      const color = o.color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : o.color;
+      Object.assign(this.s, { level: o.level, coach: o.coach, color, start: o.fen || START, moves: [] });
+      this.g = new Chess(this.s.start); this.pending = null; this.hint = null; this.showNew = false; this.recorded = false;
+      this.save();
+      this.enter();
+    },
+    maybeComputer() {
+      if (this.g.isGameOver() || this.g.turn() === this.s.color || this.thinking || this.pending) return;
+      this.thinking = true; board.set({ busy: true }); this.render();
+      later(() => {
+        const mv = E.pickMove(this.g.fen(), this.s.level);
+        const r = this.g.move(mv);
+        this.thinking = false; this.save();
+        board.set({ fen: this.g.fen(), last: r, busy: false, marks: {} });
+        this.afterMove();
+      }, 380);
+    },
+    afterMove() {
+      if (this.g.isGameOver() && !this.recorded) {
+        this.recorded = true;
+        const k = this.s.level, st = this.stats[k] = this.stats[k] || { w: 0, l: 0, d: 0 };
+        if (this.g.isCheckmate()) st[this.g.turn() === this.s.color ? 'l' : 'w']++; else st.d++;
+        store.set('cc.stats', this.stats);
+      }
+      this.render();
+      this.maybeComputer();
+    },
+    onMove(mv) {
+      if (this.thinking || this.pending || this.g.turn() !== this.s.color) return;
+      this.hint = null;
+      if (this.s.coach) {
+        const w = E.checkMove(this.g.fen(), mv);
+        if (w) {
+          this.pending = { mv, w };
+          const t = tryMove(this.g.fen(), mv);
+          board.set({ fen: t.g.fen(), last: t.r, busy: true, marks: { [w.from]: 'danger', [w.to]: 'danger' } });
+          return this.render();
+        }
+      }
+      this.commit(mv);
+    },
+    commit(mv) {
+      const r = this.g.move(mv); this.pending = null; this.save();
+      board.set({ fen: this.g.fen(), last: r, busy: false, marks: {} });
+      this.afterMove();
+    },
+    cancelPending() {
+      this.pending = null;
+      board.set({ fen: this.g.fen(), last: this.lastMove(), busy: false, marks: {} });
+      this.render();
+    },
+    takeBack() {
+      if (this.thinking) return;
+      if (this.pending) return this.cancelPending();
+      const n = this.g.history().length;
+      if (!n) return;
+      this.g.undo();
+      if (this.g.turn() !== this.s.color && this.g.history().length) this.g.undo();
+      this.recorded = false; this.hint = null; this.save();
+      board.set({ fen: this.g.fen(), last: this.lastMove(), marks: {}, busy: false });
+      this.render();
+      this.maybeComputer();
+    },
+    showHint() {
+      if (this.g.turn() !== this.s.color || this.g.isGameOver()) return;
+      const h = E.hint(this.g.fen());
+      this.hint = h;
+      board.set({ marks: { [h.from]: 'hint', [h.to]: 'hint' } });
+      this.render();
+    },
+    status() {
+      const g = this.g, you = this.s.color;
+      if (g.isCheckmate()) return g.turn() === you ? feedback('bad', '<b>Checkmate. The computer wins.</b> Use <i>Take back</i> to see what went wrong, or start a new game.') : feedback('good', '<b>Checkmate. You win!</b>');
+      if (g.isStalemate()) return feedback('info', `<b>Stalemate, a draw.</b> ${SIDE[g.turn()]} isn't in check but has no legal move.`);
+      if (g.isInsufficientMaterial()) return feedback('info', '<b>Draw.</b> Neither side has enough pieces left to checkmate.');
+      if (g.isThreefoldRepetition()) return feedback('info', '<b>Draw by repetition.</b> The same position came up three times.');
+      if (g.isDraw()) return feedback('info', '<b>Draw.</b> Fifty moves passed without a capture or a pawn move.');
+      if (this.thinking) return '<p class="task muted">Computer is thinking…</p>';
+      return `<p class="task">${g.turn() === you ? 'Your move' : 'Computer to move'}${g.inCheck() ? ': <b>you are in check!</b>' : '.'}</p>`;
+    },
+    material() {
+      const start = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+      const have = { w: { p: 0, n: 0, b: 0, r: 0, q: 0 }, b: { p: 0, n: 0, b: 0, r: 0, q: 0 } };
+      for (const row of this.g.board()) for (const p of row) if (p && p.type !== 'k') have[p.color][p.type]++;
+      let diff = 0;
+      const taken = (c) => { // pieces of color c that are gone
+        let h = '';
+        for (const t of ['q', 'r', 'b', 'n', 'p']) for (let i = have[c][t]; i < start[t]; i++) h += pieceImg(c + t.toUpperCase());
+        return h;
+      };
+      for (const t in start) diff += (have.w[t] - have.b[t]) * ({ p: 1, n: 3, b: 3, r: 5, q: 9 })[t];
+      const you = this.s.color, lead = you === 'w' ? diff : -diff;
+      return `<div class="material"><div><span class="label">You took</span><span class="caps">${taken(you === 'w' ? 'b' : 'w') || '—'}</span></div><div><span class="label">Computer took</span><span class="caps">${taken(you) || '—'}</span></div>
+        <div class="score">${lead > 0 ? `You're ahead by <b>${lead}</b>` : lead < 0 ? `You're behind by <b>${-lead}</b>` : 'Material is even'}</div></div>`;
+    },
+    render() {
+      const lv = E.LEVELS.find((l) => l.id === this.s.level);
+      const h = this.g.history();
+      let moves = '';
+      const startBlack = new Chess(this.s.start).turn() === 'b';
+      const offset = startBlack ? 1 : 0;
+      const n0 = new Chess(this.s.start).moveNumber();
+      for (let i = -offset; i < h.length; i += 2) {
+        moves += `<li><span class="mn">${n0 + (i + offset) / 2}.</span><span>${i < 0 ? '…' : esc(h[i])}</span><span>${h[i + 1] ? esc(h[i + 1]) : ''}</span></li>`;
+      }
+      let warn = '';
+      if (this.pending) {
+        const w = this.pending.w;
+        const them = this.s.color === 'w' ? 'Black' : 'White';
+        warn = `<div class="warn"><p><b>Wait! Look at ${esc(w.mover.san)} again.</b></p><p>${w.kind === 'mate' ? `${them} can answer <b>${esc(w.reply)}</b>, and that's checkmate.` : `${them} can answer <b>${esc(w.reply)}</b> and win your ${w.lost}.`}</p>
+          <div class="row"><button data-act="undo-pending" class="primary">Pick another move</button><button data-act="force" class="ghost-btn">Play it anyway</button></div></div>`;
+      }
+      const hint = this.hint ? feedback('hint', `Try <b>${esc(this.hint.san)}</b>. ${esc(this.hint.why)}`) : '';
+      const rec = this.stats[this.s.level];
+      const form = this.showNew ? this.formHtml() : '';
+      panel.innerHTML = `<div class="crumbs"><span>Play the computer</span><span>${esc(lv.name)} · you are ${SIDE[this.s.color]}${this.s.coach ? ' · coach on' : ''}</span></div>
+        ${this.status()}${warn}${hint}
+        <div class="row tools"><button data-act="new" class="${this.g.isGameOver() ? 'primary' : 'ghost-btn'}">New game</button><button data-act="back" class="ghost-btn" ${h.length || this.pending ? '' : 'disabled'}>Take back</button><button data-act="hint" class="ghost-btn" ${this.g.turn() === this.s.color && !this.g.isGameOver() && !this.pending ? '' : 'disabled'}>Hint</button><button data-act="flip" class="ghost-btn" aria-label="Flip board">Flip</button></div>
+        ${form}
+        ${this.material()}
+        <ol class="movelist">${moves || '<li class="muted">No moves yet.</li>'}</ol>
+        ${rec ? `<p class="muted small">Your record against ${esc(lv.name)}: ${rec.w} won, ${rec.l} lost, ${rec.d} drawn.</p>` : ''}`;
+      const ml = panel.querySelector('.movelist'); if (ml) ml.scrollTop = ml.scrollHeight;
+      panel.onclick = (e) => {
+        const a = e.target.closest('[data-act]'); if (!a) return;
+        const act = a.dataset.act;
+        if (act === 'new') { this.showNew = !this.showNew; this.render(); }
+        if (act === 'back') this.takeBack();
+        if (act === 'hint') this.showHint();
+        if (act === 'flip') board.set({ orientation: board.orientation === 'w' ? 'b' : 'w' });
+        if (act === 'undo-pending') this.cancelPending();
+        if (act === 'force') this.commit(this.pending.mv);
+        if (act === 'start') {
+          const f = panel.querySelector('form');
+          this.newGame({ color: f.color.value, level: +f.level.value, coach: f.coach.checked });
+        }
+      };
+    },
+    formHtml() {
+      const s = this.s;
+      return `<form class="newgame" onsubmit="return false">
+        <fieldset><legend>Your color</legend><div class="seg">${[['w', 'White'], ['b', 'Black'], ['random', 'Random']].map(([v, l]) => `<label><input type="radio" name="color" value="${v}" ${s.color === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+        <fieldset><legend>Opponent</legend>${E.LEVELS.map((l) => `<label class="lvl"><input type="radio" name="level" value="${l.id}" ${s.level === l.id ? 'checked' : ''}><span><b>${esc(l.name)}</b><small>${esc(l.blurb)}</small></span></label>`).join('')}</fieldset>
+        <label class="check"><input type="checkbox" name="coach" ${s.coach ? 'checked' : ''}><span><b>Coach</b><small>Warns you before a move that gives away a piece or allows checkmate.</small></span></label>
+        <div class="row"><span class="grow"></span><button type="button" data-act="start" class="primary">Start game</button></div></form>`;
+    },
+  };
+  Play.init();
+
+  // ---------------------------------------------------------------- Tabs
+  const TABS = { learn: Learn, puzzles: Puzzles, openings: Openings, play: Play };
+  let tab = store.get('cc.tab', 'learn');
+  if (!TABS[tab]) tab = 'learn';
+  function setTab(t) {
+    tab = t; store.set('cc.tab', t);
+    document.querySelectorAll('nav [data-tab]').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === t ? 'page' : 'false'));
+  }
+  document.querySelector('nav').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tab]'); if (!b) return;
+    // Clicking the current tab again goes back to its list.
+    if (b.dataset.tab === tab && TABS[tab].list) { TABS[tab].list(); return; }
+    setTab(b.dataset.tab); TABS[tab].enter();
+  });
+  setTab(tab);
+  TABS[tab].enter();
+}
+</script>
+<script type="module">
+try {
+  const { Chess } = await import('https://cdn.jsdelivr.net/npm/chess.js@1.4.0/dist/esm/chess.js');
+  startApp(Chess);
+} catch (e) {
+  document.getElementById('panel').innerHTML = '<p id="loading">Couldn\'t load the chess rules library. Check your internet connection and reload.</p>';
+  console.error(e);
+}
+</script>
+</body>
+</html>
